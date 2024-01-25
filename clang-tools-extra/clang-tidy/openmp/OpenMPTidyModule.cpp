@@ -9,6 +9,7 @@
 #include "../ClangTidy.h"
 #include "../ClangTidyModule.h"
 #include "../ClangTidyModuleRegistry.h"
+#include "DoNotModifyLoopVariableCheck.h"
 #include "ExceptionEscapeCheck.h"
 #include "MissingForInParallelDirectiveBeforeForLoopCheck.h"
 #include "UseDefaultNoneCheck.h"
@@ -20,6 +21,8 @@ namespace openmp {
 class OpenMPModule : public ClangTidyModule {
 public:
   void addCheckFactories(ClangTidyCheckFactories &CheckFactories) override {
+    CheckFactories.registerCheck<DoNotModifyLoopVariableCheck>(
+        "openmp-do-not-modify-loop-variable");
     CheckFactories.registerCheck<ExceptionEscapeCheck>(
         "openmp-exception-escape");
     CheckFactories

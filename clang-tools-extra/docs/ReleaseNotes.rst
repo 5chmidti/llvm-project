@@ -116,6 +116,12 @@ New checks
   Finds initializer lists for aggregate types that could be
   written as designated initializers instead.
 
+- New :doc:`openmp-do-not-modify-loop-variable
+  <clang-tidy/checks/openmp/do-not-modify-loop-variable>` check.
+
+  Finds openmp loop directives where the loop counter or condition is modified
+  in the body.
+
 - New :doc:`openmp-missing-for-in-parallel-construct-before-for-loop
   <clang-tidy/checks/openmp/missing-for-in-parallel-construct-before-for-loop>` check.
 
