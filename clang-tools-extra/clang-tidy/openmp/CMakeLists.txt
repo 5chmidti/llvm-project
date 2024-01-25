@@ -9,6 +9,7 @@ add_clang_library(clangTidyOpenMPModule
   ExceptionEscapeCheck.cpp
   MissingForInParallelDirectiveBeforeForLoopCheck.cpp
   OpenMPTidyModule.cpp
+  UnprotectedSharedVariableAccessCheck.cpp
   UseDefaultNoneCheck.cpp
 
   LINK_LIBS

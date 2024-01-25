@@ -13,6 +13,7 @@
 #include "DoNotModifyLoopVariableCheck.h"
 #include "ExceptionEscapeCheck.h"
 #include "MissingForInParallelDirectiveBeforeForLoopCheck.h"
+#include "UnprotectedSharedVariableAccessCheck.h"
 #include "UseDefaultNoneCheck.h"
 
 namespace clang::tidy {
@@ -32,6 +33,8 @@ public:
     CheckFactories
         .registerCheck<MissingForInParallelDirectiveBeforeForLoopCheck>(
             "openmp-missing-for-in-parallel-directive-before-for-loop");
+    CheckFactories.registerCheck<UnprotectedSharedVariableAccessCheck>(
+        "openmp-unprotected-shared-variable-access");
     CheckFactories.registerCheck<UseDefaultNoneCheck>(
         "openmp-use-default-none");
   }

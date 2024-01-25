@@ -134,6 +134,11 @@ New checks
   Finds OpenMP parallel directives where the next statement is a for loop,
   and the ``parallel`` directive is not a ``parallel for`` directive.
 
+- New :doc:`openmp-unprotected-shared-variable-access
+  <clang-tidy/checks/openmp/unprotected-shared-variable-access>` check.
+
+  Finds unprotected accesses to shared variables.
+
 - New :doc:`readability-use-std-min-max
   <clang-tidy/checks/readability/use-std-min-max>` check.
 
