@@ -314,6 +314,7 @@ Clang-Tidy Checks
    :doc:`objc-nsinvocation-argument-lifetime <objc/nsinvocation-argument-lifetime>`, "Yes"
    :doc:`objc-property-declaration <objc/property-declaration>`, "Yes"
    :doc:`objc-super-self <objc/super-self>`, "Yes"
+   :doc:`openmp-declare-loop-iteration-variable-in-for-init-statement <openmp/declare-loop-iteration-variable-in-for-init-statement>`,
    :doc:`openmp-do-not-modify-loop-variable <openmp/do-not-modify-loop-variable>`,
    :doc:`openmp-exception-escape <openmp/exception-escape>`,
    :doc:`openmp-missing-for-in-parallel-construct-before-for-loop <openmp/missing-for-in-parallel-construct-before-for-loop>`,

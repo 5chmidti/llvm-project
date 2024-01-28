@@ -116,6 +116,12 @@ New checks
   Finds initializer lists for aggregate types that could be
   written as designated initializers instead.
 
+- New :doc:`openmp-declare-loop-iteration-variable-in-for-init-statement
+  <clang-tidy/checks/openmp/declare-loop-iteration-variable-in-for-init-statement>` check.
+
+  Finds OpenMP for loops where the loop iteration variable is not declared
+  in the for loop initialization statement.
+
 - New :doc:`openmp-do-not-modify-loop-variable
   <clang-tidy/checks/openmp/do-not-modify-loop-variable>` check.
 

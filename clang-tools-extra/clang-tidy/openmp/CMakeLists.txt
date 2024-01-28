@@ -4,6 +4,7 @@ set(LLVM_LINK_COMPONENTS
   )
 
 add_clang_library(clangTidyOpenMPModule
+  DeclareLoopIterationVariableInForInitStatementCheck.cpp
   DoNotModifyLoopVariableCheck.cpp
   ExceptionEscapeCheck.cpp
   MissingForInParallelDirectiveBeforeForLoopCheck.cpp
