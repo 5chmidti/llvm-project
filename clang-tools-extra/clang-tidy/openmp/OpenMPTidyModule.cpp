@@ -10,6 +10,7 @@
 #include "../ClangTidyModule.h"
 #include "../ClangTidyModuleRegistry.h"
 #include "ExceptionEscapeCheck.h"
+#include "MissingForInParallelDirectiveBeforeForLoopCheck.h"
 #include "UseDefaultNoneCheck.h"
 
 namespace clang::tidy {
@@ -21,6 +22,9 @@ public:
   void addCheckFactories(ClangTidyCheckFactories &CheckFactories) override {
     CheckFactories.registerCheck<ExceptionEscapeCheck>(
         "openmp-exception-escape");
+    CheckFactories
+        .registerCheck<MissingForInParallelDirectiveBeforeForLoopCheck>(
+            "openmp-missing-for-in-parallel-directive-before-for-loop");
     CheckFactories.registerCheck<UseDefaultNoneCheck>(
         "openmp-use-default-none");
   }

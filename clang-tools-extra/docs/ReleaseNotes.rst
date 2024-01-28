@@ -116,6 +116,12 @@ New checks
   Finds initializer lists for aggregate types that could be
   written as designated initializers instead.
 
+- New :doc:`openmp-missing-for-in-parallel-construct-before-for-loop
+  <clang-tidy/checks/openmp/missing-for-in-parallel-construct-before-for-loop>` check.
+
+  Finds OpenMP parallel directives where the next statement is a for loop,
+  and the ``parallel`` directive is not a ``parallel for`` directive.
+
 - New :doc:`readability-use-std-min-max
   <clang-tidy/checks/readability/use-std-min-max>` check.
 
