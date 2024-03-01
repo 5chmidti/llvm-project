@@ -134,6 +134,12 @@ New checks
   Finds OpenMP parallel directives where the next statement is a for loop,
   and the ``parallel`` directive is not a ``parallel for`` directive.
 
+- New :doc:`openmp-specify-schedule
+  <clang-tidy/checks/openmp/specify-schedule>` check.
+
+  Detects OpenMP ``for`` directives without a ``schedule`` clause, because the
+  default schedule is implementation-defined.
+
 - New :doc:`openmp-unprotected-shared-variable-access
   <clang-tidy/checks/openmp/unprotected-shared-variable-access>` check.
 

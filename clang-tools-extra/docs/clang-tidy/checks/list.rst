@@ -318,6 +318,7 @@ Clang-Tidy Checks
    :doc:`openmp-do-not-modify-loop-variable <openmp/do-not-modify-loop-variable>`,
    :doc:`openmp-exception-escape <openmp/exception-escape>`,
    :doc:`openmp-missing-for-in-parallel-construct-before-for-loop <openmp/missing-for-in-parallel-construct-before-for-loop>`,
+   :doc:`openmp-specify-schedule <openmp/specify-schedule>`,
    :doc:`openmp-unprotected-shared-variable-access <openmp/unprotected-shared-variable-access>`,
    :doc:`openmp-use-default-none <openmp/use-default-none>`,
    :doc:`performance-avoid-endl <performance/avoid-endl>`, "Yes"
