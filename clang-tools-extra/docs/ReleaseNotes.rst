@@ -116,6 +116,11 @@ New checks
   Finds initializer lists for aggregate types that could be
   written as designated initializers instead.
 
+- New :doc:`openmp-avoid-nesting-critical-sections
+  <clang-tidy/checks/openmp/avoid-nesting-critical-sections>` check.
+
+  Warns about nested critical sections.
+
 - New :doc:`openmp-declare-loop-iteration-variable-in-for-init-statement
   <clang-tidy/checks/openmp/declare-loop-iteration-variable-in-for-init-statement>` check.
 
