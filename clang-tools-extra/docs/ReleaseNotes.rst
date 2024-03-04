@@ -121,6 +121,11 @@ New checks
 
   Warns about nested critical sections.
 
+- New :doc:`openmp-critical-section-deadlock
+  <clang-tidy/checks/openmp/critical-section-deadlock>` check.
+
+  Detects deadlocks from nesting OpenMP critical regions.
+
 - New :doc:`openmp-declare-loop-iteration-variable-in-for-init-statement
   <clang-tidy/checks/openmp/declare-loop-iteration-variable-in-for-init-statement>` check.
 

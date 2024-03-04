@@ -10,6 +10,7 @@
 #include "../ClangTidyModule.h"
 #include "../ClangTidyModuleRegistry.h"
 #include "AvoidNestingCriticalSectionsCheck.h"
+#include "CriticalSectionDeadlockCheck.h"
 #include "DeclareLoopIterationVariableInForInitStatementCheck.h"
 #include "DoNotModifyLoopVariableCheck.h"
 #include "ExceptionEscapeCheck.h"
@@ -27,6 +28,8 @@ public:
   void addCheckFactories(ClangTidyCheckFactories &CheckFactories) override {
     CheckFactories.registerCheck<AvoidNestingCriticalSectionsCheck>(
         "openmp-avoid-nesting-critical-sections");
+    CheckFactories.registerCheck<CriticalSectionDeadlockCheck>(
+        "openmp-critical-section-deadlock");
     CheckFactories
         .registerCheck<DeclareLoopIterationVariableInForInitStatementCheck>(
             "openmp-declare-loop-iteration-variable-in-for-init-statement");

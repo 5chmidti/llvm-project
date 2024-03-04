@@ -315,6 +315,7 @@ Clang-Tidy Checks
    :doc:`objc-property-declaration <objc/property-declaration>`, "Yes"
    :doc:`objc-super-self <objc/super-self>`, "Yes"
    :doc:`openmp-avoid-nesting-critical-sections <openmp/avoid-nesting-critical-sections>`,
+   :doc:`openmp-critical-section-deadlock <openmp/critical-section-deadlock>`,
    :doc:`openmp-declare-loop-iteration-variable-in-for-init-statement <openmp/declare-loop-iteration-variable-in-for-init-statement>`,
    :doc:`openmp-do-not-modify-loop-variable <openmp/do-not-modify-loop-variable>`,
    :doc:`openmp-exception-escape <openmp/exception-escape>`,
