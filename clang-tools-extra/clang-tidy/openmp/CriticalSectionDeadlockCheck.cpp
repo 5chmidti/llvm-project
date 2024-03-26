@@ -97,11 +97,6 @@ public:
       }
     }
 
-    // We don't care about barriers before any critical section was even
-    // entered.
-    if (!Orderings.empty())
-      Barriers.push_back(BarrierInfo{Barrier, Orderings.size()});
-
     return true;
   }
 
@@ -152,7 +147,6 @@ public:
   CallStackType DescendantCriticalDirectiveCallStack;
 
   std::vector<llvm::SmallVector<CriticalSectionInfo, 4>> Orderings;
-  llvm::SmallVector<BarrierInfo, 4> Barriers;
   llvm::SmallVector<CriticalSectionInfo, 4> CurrentOrdering;
 
   CriticalSectionDeadlockCheck *Check;
@@ -191,9 +185,6 @@ void CriticalSectionDeadlockCheck::check(
           << CE->getCalleeDecl()->getAsFunction();
   };
 
-  auto *CurrentBarrier = Visitor.Barriers.begin();
-  auto *const BarrierEnd = Visitor.Barriers.end();
-
   for (const auto &[OuterOrderIndex, Order1] :
        llvm::enumerate(Visitor.Orderings))
     for (const auto &[Order1BeforeIndex, Order1BeforeInfo] :
@@ -224,19 +215,6 @@ void CriticalSectionDeadlockCheck::check(
         }
       for (size_t InnerOrderIndex = OuterOrderIndex + 1;
            InnerOrderIndex < Visitor.Orderings.size(); ++InnerOrderIndex) {
-        if (!IgnoreBarriers) {
-          const auto IsOrderedAfterOuterOrder =
-              [Index = OuterOrderIndex](
-                  const NestedCriticalSectionOrderingFinder::BarrierInfo Info) {
-                return Index <= Info.IndexOfNextCritical;
-              };
-
-          CurrentBarrier = std::find_if(CurrentBarrier, BarrierEnd,
-                                        IsOrderedAfterOuterOrder);
-          if (CurrentBarrier != BarrierEnd)
-            continue;
-        }
-
         const auto &Order2 = Visitor.Orderings[InnerOrderIndex];
         for (const auto &[Order1After, Order1AfterCallStack] :
              llvm::ArrayRef(Order1).drop_front(Order1BeforeIndex + 1)) {
@@ -298,16 +276,6 @@ void CriticalSectionDeadlockCheck::check(
         }
       }
     }
-}
-
-CriticalSectionDeadlockCheck::CriticalSectionDeadlockCheck(
-    StringRef Name, ClangTidyContext *Context)
-    : ClangTidyCheck(Name, Context),
-      IgnoreBarriers(Options.get("IgnoreBarriers", false)) {}
-
-void CriticalSectionDeadlockCheck::storeOptions(
-    ClangTidyOptions::OptionMap &Opts) {
-  Options.store(Opts, "IgnoreBarriers", IgnoreBarriers);
 }
 
 } // namespace clang::tidy::openmp

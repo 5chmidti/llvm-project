@@ -1,5 +1,4 @@
 // RUN: %check_clang_tidy %s openmp-critical-section-deadlock %t -- --extra-arg=-fopenmp
-// RUN: %check_clang_tidy -check-suffixes=,BARRIER %s openmp-critical-section-deadlock %t -- -config="{CheckOptions: {openmp-critical-section-deadlock.IgnoreBarriers: true}}" --extra-arg=-fopenmp
 
 void foo();
 void fooWithVisibleCritical() {
@@ -142,7 +141,7 @@ void Cycle(bool* flags, int N) {
         [Tmp = CriticalLambdaWithReturn()](){ };
     else
 // CHECK-MESSAGES: :[[@LINE+3]]:7: warning: deadlock while trying to enter a critical section with the same name '' as the already entered critical section here [openmp-critical-section-deadlock]
-// CHECK-MESSAGES: :32:3: note: trying to re-enter the critical section '' here
+// CHECK-MESSAGES: :31:3: note: trying to re-enter the critical section '' here
 // CHECK-MESSAGES: :[[@LINE+2]]:16: note: critical section '' is reached by calling 'operator()' here
       #pragma omp critical
         [Tmp = CriticalLambdaWithReturn()](){ };
@@ -153,10 +152,10 @@ void Cycle(bool* flags, int N) {
     if (flags[i])
 // CHECK-MESSAGES: :[[@LINE+7]]:7: warning: deadlock by inconsistent ordering of critical sections 'X' and '' [openmp-critical-section-deadlock]
 // CHECK-MESSAGES: :[[@LINE+6]]:7: note: critical section 'X' is entered first in the first section ordering here
-// CHECK-MESSAGES: :22:3: note: critical section '' is nested inside 'X' in the first section ordering here
+// CHECK-MESSAGES: :21:3: note: critical section '' is nested inside 'X' in the first section ordering here
 // CHECK-MESSAGES: :[[@LINE+5]]:9: note: critical section '' is reached by calling 'operator()' here
 // CHECK-MESSAGES: :[[@LINE+6]]:7: note: critical section '' is entered first in the second section ordering here
-// CHECK-MESSAGES: :27:3: note: critical section 'X' is nested inside '' in the second section ordering here
+// CHECK-MESSAGES: :26:3: note: critical section 'X' is nested inside '' in the second section ordering here
 // CHECK-MESSAGES: :[[@LINE+5]]:9: note: critical section 'X' is reached by calling 'operator()' here
       #pragma omp critical(X)
         CriticalLambda();
@@ -196,10 +195,10 @@ void Cycle(bool* flags, int N) {
     if (flags[i])
 // CHECK-MESSAGES: :[[@LINE+7]]:7: warning: deadlock by inconsistent ordering of critical sections 'Name1' and 'Name2' [openmp-critical-section-deadlock]
 // CHECK-MESSAGES: :[[@LINE+6]]:7: note: critical section 'Name1' is entered first in the first section ordering here
-// CHECK-MESSAGES: :14:5: note: critical section 'Name2' is nested inside 'Name1' in the first section ordering here
+// CHECK-MESSAGES: :13:5: note: critical section 'Name2' is nested inside 'Name1' in the first section ordering here
 // CHECK-MESSAGES: :[[@LINE+5]]:9: note: critical section 'Name2' is reached by calling 'fooWithVisibleName2Critical' here
 // CHECK-MESSAGES: :[[@LINE+6]]:7: note: critical section 'Name2' is entered first in the second section ordering here
-// CHECK-MESSAGES: :10:5: note: critical section 'Name1' is nested inside 'Name2' in the second section ordering here
+// CHECK-MESSAGES: :9:5: note: critical section 'Name1' is nested inside 'Name2' in the second section ordering here
 // CHECK-MESSAGES: :[[@LINE+5]]:9: note: critical section 'Name1' is reached by calling 'fooWithVisibleName1Critical' here
       #pragma omp critical(Name1)
         fooWithVisibleName2Critical();
@@ -210,11 +209,11 @@ void Cycle(bool* flags, int N) {
 
   #pragma omp parallel
   {
-// CHECK-MESSAGES-BARRIER: :[[@LINE+5]]:5: warning: deadlock by inconsistent ordering of critical sections 'X' and 'Y' [openmp-critical-section-deadlock]
-// CHECK-MESSAGES-BARRIER: :[[@LINE+4]]:5: note: critical section 'X' is entered first in the first section ordering here
-// CHECK-MESSAGES-BARRIER: :[[@LINE+4]]:7: note: critical section 'Y' is nested inside 'X' in the first section ordering here
-// CHECK-MESSAGES-BARRIER: :[[@LINE+8]]:5: note: critical section 'Y' is entered first in the second section ordering here
-// CHECK-MESSAGES-BARRIER: :[[@LINE+8]]:7: note: critical section 'X' is nested inside 'Y' in the second section ordering here
+// CHECK-MESSAGES: :[[@LINE+5]]:5: warning: deadlock by inconsistent ordering of critical sections 'X' and 'Y' [openmp-critical-section-deadlock]
+// CHECK-MESSAGES: :[[@LINE+4]]:5: note: critical section 'X' is entered first in the first section ordering here
+// CHECK-MESSAGES: :[[@LINE+4]]:7: note: critical section 'Y' is nested inside 'X' in the first section ordering here
+// CHECK-MESSAGES: :[[@LINE+8]]:5: note: critical section 'Y' is entered first in the second section ordering here
+// CHECK-MESSAGES: :[[@LINE+8]]:7: note: critical section 'X' is nested inside 'Y' in the second section ordering here
     #pragma omp critical(X)
       #pragma omp critical(Y)
         x = y;
@@ -234,7 +233,7 @@ void SelfCycle() {
       fooWithVisibleCritical();
 
 // CHECK-MESSAGES: :[[@LINE+3]]:5: warning: deadlock while trying to enter a critical section with the same name 'Name1' as the already entered critical section here [openmp-critical-section-deadlock]
-// CHECK-MESSAGES: :10:5: note: trying to re-enter the critical section 'Name1' here
+// CHECK-MESSAGES: :9:5: note: trying to re-enter the critical section 'Name1' here
 // CHECK-MESSAGES: :[[@LINE+2]]:7: note: critical section 'Name1' is reached by calling 'fooWithVisibleName1Critical' here
     #pragma omp critical(Name1)
       fooWithVisibleName1Critical();
@@ -245,7 +244,7 @@ void SelfCycle() {
       Lambda1;
 
 // CHECK-MESSAGES: :[[@LINE+4]]:5: warning: deadlock while trying to enter a critical section with the same name 'Name1' as the already entered critical section here [openmp-critical-section-deadlock]
-// CHECK-MESSAGES: :10:5: note: trying to re-enter the critical section 'Name1' here
+// CHECK-MESSAGES: :9:5: note: trying to re-enter the critical section 'Name1' here
 // CHECK-MESSAGES: :[[@LINE+3]]:7: note: critical section 'Name1' is reached by calling 'operator()' here
 // CHECK-MESSAGES: :[[@LINE-8]]:32: note: critical section 'Name1' is reached by calling 'fooWithVisibleName1Critical' here
     #pragma omp critical(Name1)

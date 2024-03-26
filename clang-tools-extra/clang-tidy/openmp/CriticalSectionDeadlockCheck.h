@@ -19,13 +19,10 @@ namespace clang::tidy::openmp {
 /// http://clang.llvm.org/extra/clang-tidy/checks/openmp/critical-section-deadlock.html
 class CriticalSectionDeadlockCheck : public ClangTidyCheck {
 public:
-  CriticalSectionDeadlockCheck(StringRef Name, ClangTidyContext *Context);
+  CriticalSectionDeadlockCheck(StringRef Name, ClangTidyContext *Context)
+      : ClangTidyCheck(Name, Context) {}
   void registerMatchers(ast_matchers::MatchFinder *Finder) override;
   void check(const ast_matchers::MatchFinder::MatchResult &Result) override;
-  void storeOptions(ClangTidyOptions::OptionMap &Opts) override;
-
-private:
-  const bool IgnoreBarriers;
 };
 
 } // namespace clang::tidy::openmp
