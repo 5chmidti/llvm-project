@@ -9,6 +9,7 @@
 #include "MissingForInParallelDirectiveBeforeForLoopCheck.h"
 #include "../utils/LexerUtils.h"
 #include "clang/ASTMatchers/ASTMatchersInternal.h"
+#include "clang/Basic/DiagnosticIDs.h"
 #include <clang/AST/ASTFwd.h>
 #include <clang/AST/StmtOpenMP.h>
 #include <clang/ASTMatchers/ASTMatchFinder.h>
@@ -57,15 +58,26 @@ void MissingForInParallelDirectiveBeforeForLoopCheck::registerMatchers(
 void MissingForInParallelDirectiveBeforeForLoopCheck::check(
     const MatchFinder::MatchResult &Result) {
   const auto *Parallel = Result.Nodes.getNodeAs<OMPParallelDirective>("omp");
-  diag(Parallel->getBeginLoc(), "OpenMP `parallel` directive does not "
-                                "contain work-sharing construct `for`, but "
-                                "for loop is the next statement")
+  diag(Parallel->getBeginLoc(),
+       "OpenMP `parallel` directive does not "
+       "contain work-sharing construct `for`, but "
+       "for loop is the next statement; add `for` to the directive")
       << Parallel->getSourceRange()
       << FixItHint::CreateInsertion(
              getEndOfParallelWord(Parallel->getBeginLoc(),
                                   *Result.SourceManager,
                                   Result.Context->getLangOpts()),
              " for");
+  diag(Parallel->getBeginLoc(),
+       "otherwise add a compound statement around the for loop to signal that "
+       "this pattern is intended",
+       DiagnosticIDs::Level::Note)
+      << Parallel->getAssociatedStmt()->getSourceRange()
+      << FixItHint::CreateInsertion(
+             Parallel->getAssociatedStmt()->getBeginLoc(), "{")
+      << FixItHint::CreateInsertion(
+             Parallel->getAssociatedStmt()->getEndLoc().getLocWithOffset(1),
+             "}");
 }
 
 } // namespace clang::tidy::openmp
