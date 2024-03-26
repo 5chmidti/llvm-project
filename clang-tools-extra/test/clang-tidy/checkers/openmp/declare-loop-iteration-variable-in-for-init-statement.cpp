@@ -28,10 +28,11 @@ void foo3(int A) {
 }
 
 void foo4(int A) {
-    // CHECK-MESSAGES:[[@LINE+3]]:5: warning: declare the loop iteration variable 'DeclaredBefore4' in the for-loop initializer statement [openmp-declare-loop-iteration-variable-in-for-init-statement]
-    // CHECK-MESSAGES:[[@LINE+1]]:12: note: 'DeclaredBefore4' was declared here
+    // CHECK-MESSAGES:[[@LINE+4]]:5: warning: declare the loop iteration variable 'DeclaredBefore4' in the for-loop initializer statement [openmp-declare-loop-iteration-variable-in-for-init-statement]
+    // CHECK-MESSAGES:[[@LINE+2]]:12: note: 'DeclaredBefore4' was declared here
+    // CHECK-MESSAGES:[[@LINE+2]]:58: note: 'DeclaredBefore4' has been declared as 'lastprivate'
     int B, DeclaredBefore4, C;
-    #pragma omp parallel for firstprivate(A) lastprivate(B, C)
+    #pragma omp parallel for firstprivate(A) lastprivate(DeclaredBefore4, B, C)
     for (DeclaredBefore4 = 0; DeclaredBefore4 < (A + 1); ++DeclaredBefore4) {}
 }
 

@@ -25,6 +25,7 @@
 #include "clang/Basic/DiagnosticIDs.h"
 #include "clang/Basic/OpenMPKinds.h"
 #include "llvm/ADT/APSInt.h"
+#include "llvm/Support/Casting.h"
 #include <cstddef>
 #include <optional>
 #include <string>
@@ -168,6 +169,27 @@ void DeclareLoopIterationVariableInForInitStatementCheck::check(
     diag(IterVar->getLocation(), "%0 was declared here",
          DiagnosticIDs::Level::Note)
         << IterVar->getSourceRange() << IterVar;
+
+  const auto *const LastPrivate =
+      Directive->getSingleClause<OMPLastprivateClause>();
+
+  if (!LastPrivate)
+    return;
+
+  const auto LastPrivateVars = LastPrivate->getVarRefs();
+
+  for (const DeclRefExpr *const DRef : IterVarsNotDeclaredInInit) {
+    for (const Expr *const LastPrivateVar : LastPrivateVars)
+      if (const auto *const LastPrivateDRefExpr =
+              llvm::dyn_cast_or_null<DeclRefExpr>(LastPrivateVar);
+          LastPrivateDRefExpr &&
+          DRef->getDecl() == LastPrivateDRefExpr->getDecl())
+        diag(LastPrivateVar->getBeginLoc(),
+             "%0 has been declared as 'lastprivate'",
+             DiagnosticIDs::Level::Note)
+            << LastPrivateDRefExpr->getDecl()
+            << LastPrivateVar->getSourceRange();
+  }
 }
 
 } // namespace clang::tidy::openmp
