@@ -42,7 +42,7 @@ void SpecifyScheduleCheck::check(const MatchFinder::MatchResult &Result) {
   const auto *Directive =
       Result.Nodes.getNodeAs<OMPExecutableDirective>("directive");
   diag(Directive->getBeginLoc(),
-       "specify the schedule for this openmp '%0' "
+       "specify the schedule for this OpenMP '%0' "
        "directive to fit the work distribution across iterations, "
        "the default is implementation defined")
       << Directive->getSourceRange() <<

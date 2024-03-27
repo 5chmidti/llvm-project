@@ -3,7 +3,7 @@
 int ForWithoutScheduleInsideParallel(int*Buffer, int N){
     int Sum = 0;
     #pragma omp parallel default(none) firstprivate(N) shared(Buffer, Sum)
-// CHECK-MESSAGES: :[[@LINE+1]]:5: warning: specify the schedule for this openmp 'for' directive to fit the work distribution across iterations, the default is implementation defined [openmp-specify-schedule]
+// CHECK-MESSAGES: :[[@LINE+1]]:5: warning: specify the schedule for this OpenMP 'for' directive to fit the work distribution across iterations, the default is implementation defined [openmp-specify-schedule]
     #pragma omp for reduction(+:Sum)
     for (int I = 0; I < N; ++I) {
         Sum += Buffer[I];
@@ -23,7 +23,7 @@ int ForWithScheduleInsideParallel(int*Buffer, int N){
 
 int ParallelForWithoutSchedule(int*Buffer, int N){
     int Sum = 0;
-// CHECK-MESSAGES: :[[@LINE+1]]:5: warning: specify the schedule for this openmp 'parallel for' directive to fit the work distribution across iterations, the default is implementation defined [openmp-specify-schedule]
+// CHECK-MESSAGES: :[[@LINE+1]]:5: warning: specify the schedule for this OpenMP 'parallel for' directive to fit the work distribution across iterations, the default is implementation defined [openmp-specify-schedule]
     #pragma omp parallel for default(none) firstprivate(N) shared(Buffer) reduction(+:Sum)
     for (int I = 0; I < N; ++I) {
         Sum += Buffer[I];
@@ -42,7 +42,7 @@ int ParallelFor(int*Buffer, int N){
 
 int ParallelForSimdWithoutSchedule(int*Buffer, int N){
     int Sum = 0;
-// CHECK-MESSAGES: :[[@LINE+1]]:5: warning: specify the schedule for this openmp 'parallel for simd' directive to fit the work distribution across iterations, the default is implementation defined [openmp-specify-schedule]
+// CHECK-MESSAGES: :[[@LINE+1]]:5: warning: specify the schedule for this OpenMP 'parallel for simd' directive to fit the work distribution across iterations, the default is implementation defined [openmp-specify-schedule]
     #pragma omp parallel for simd default(none) firstprivate(N) shared(Buffer) reduction(+:Sum)
     for (int I = 0; I < N; ++I) {
         Sum += Buffer[I];
