@@ -46,8 +46,8 @@ const ast_matchers::internal::MapAnyOfMatcher<
     ompProtectedAccessDirective;
 // NOLINTEND(readability-identifier-naming)
 
-AST_MATCHER(FunctionDecl, isAtomicBuiltin) {
-  switch (Node.getBuiltinID()) {
+AST_MATCHER(CallExpr, isCallingAtomicBuiltin) {
+  switch (Node.getBuiltinCallee()) {
 #define BUILTIN(ID, TYPE, ATTRS)
 #define ATOMIC_BUILTIN(ID, TYPE, ATTRS)                                        \
   case Builtin::BI##ID:                                                        \
@@ -86,29 +86,30 @@ public:
             anyOf(hasCastKind(CastKind::CK_LValueToRValue),
                   hasImplicitDestinationType(qualType(isConstQualified())))))));
 
-    const auto AtomicIntrinsicCall =
-        callExpr(callee(functionDecl(isAtomicBuiltin())));
+    const auto AtomicIntrinsicCall = callExpr(isCallingAtomicBuiltin());
+
+    const auto Var = declRefExpr(to(
+        // `Dec` or a binding if `Dec` is a decomposition.
+        anyOf(equalsNode(Dec), bindingDecl(forDecomposition(equalsNode(Dec))))
+        //
+        ));
 
     const auto Refs = match(
-        findAll(
-            traverse(
-                TK_IgnoreUnlessSpelledInSource,
-                declRefExpr(
-                    to(
-                        // `Dec` or a binding if `Dec` is a decomposition.
-                        anyOf(equalsNode(Dec),
-                              bindingDecl(forDecomposition(equalsNode(Dec))))
-                        //
-                        ),
-                    unless(hasParent(expr(anyOf(
-                        arraySubscriptExpr(
-                            unless(allOf(hasIndex(CollidingIndex),
-                                         unless(hasType(ThreadSafeType))))),
-                        cxxOperatorCallExpr(
-                            hasOverloadedOperatorName("[]"),
-                            hasArgument(0, declRefExpr(to(equalsNode(Dec))))),
-                        AtomicIntrinsicCall))))))
-                .bind("expr")),
+        findAll(traverse(
+                    TK_IgnoreUnlessSpelledInSource,
+                    declRefExpr(
+                        Var,
+                        unless(hasParent(expr(anyOf(
+                            arraySubscriptExpr(
+                                unless(allOf(hasIndex(CollidingIndex),
+                                             unless(hasType(ThreadSafeType))))),
+                            cxxOperatorCallExpr(hasOverloadedOperatorName("[]"),
+                                                hasArgument(0, Var)),
+                            unaryOperator(hasOperatorName("&"),
+                                          hasUnaryOperand(Var),
+                                          hasParent(AtomicIntrinsicCall)),
+                            IsCastToRValueOrConst, AtomicIntrinsicCall))))))
+                    .bind("expr")),
         Stm, Context);
 
     auto Mutations = llvm::SmallVector<const Stmt *, 4>{};
