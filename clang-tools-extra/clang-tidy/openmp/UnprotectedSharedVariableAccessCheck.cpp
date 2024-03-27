@@ -10,6 +10,7 @@
 #include "../utils/Matchers.h"
 #include "../utils/OptionsUtils.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/Support/raw_ostream.h"
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/ASTTypeTraits.h>
 #include <clang/AST/Decl.h>
@@ -58,24 +59,12 @@ AST_MATCHER(FunctionDecl, isAtomicBuiltin) {
 
 class UnprotectedSharedVariableAccessAnalyzer : private ExprMutationAnalyzer {
 public:
-  UnprotectedSharedVariableAccessAnalyzer(
-      const Stmt &Stm, ASTContext &Context,
-      const llvm::SmallVector<const ValueDecl *, 4> &LoopVars)
-      : ExprMutationAnalyzer(Stm, Context), Stm(Stm), Context(Context),
-        LoopVars(LoopVars) {}
+  UnprotectedSharedVariableAccessAnalyzer(const Stmt &Stm, ASTContext &Context)
+      : ExprMutationAnalyzer(Stm, Context), Stm(Stm), Context(Context) {}
 
   llvm::SmallVector<const Stmt *, 4>
   findAllMutations(const ValueDecl *const Dec,
                    const llvm::ArrayRef<llvm::StringRef> &ThreadSafeTypes) {
-    // FIXME: false-positive: support simple stride and offset indices,
-    // preferably also with support for splitting that calculation using
-    // variables
-    // FIXME: false-negative: using an index that is inside of an inner for loop
-    // can lead to unprotected access
-    const ValueDecl *const FirstLoopVar =
-        LoopVars.empty() ? static_cast<const ValueDecl *>(nullptr)
-                         : LoopVars.front();
-
     const auto ThreadSafeType = qualType(anyOf(
         atomicType(),
         qualType(matchers::matchesAnyListedTypeName(ThreadSafeTypes)),
@@ -85,11 +74,10 @@ public:
       return {};
     }
 
-    const auto Atomic = qualType(anyOf(
-        atomicType(), hasCanonicalType(hasDeclaration(namedDecl(
-                          hasAnyName("::std::atomic", "::std::atomic_ref"))))));
-
-    const auto NonCollidingIndex = declRefExpr(to(equalsNode(FirstLoopVar)));
+    const auto CollidingIndex =
+        expr(anyOf(declRefExpr(to(varDecl(
+                       anyOf(isConstexpr(), hasType(isConstQualified()))))),
+                   constantExpr(), integerLiteral()));
 
     const auto IsCastToRValueOrConst = traverse(
         TK_AsIs,
@@ -101,7 +89,10 @@ public:
         callExpr(callee(functionDecl(isAtomicBuiltin())));
 
     const auto Refs = match(
-        findAll(declRefExpr(
+        findAll(
+            traverse(
+                TK_IgnoreUnlessSpelledInSource,
+                declRefExpr(
                     to(
                         // `Dec` or a binding if `Dec` is a decomposition.
                         anyOf(equalsNode(Dec),
@@ -110,16 +101,13 @@ public:
                         ),
                     unless(hasParent(expr(anyOf(
                         arraySubscriptExpr(
-                            anyOf(hasType(Atomic), hasIndex(NonCollidingIndex),
-                                  hasParent(AtomicIntrinsicCall))),
+                            unless(allOf(hasIndex(CollidingIndex),
+                                         unless(hasType(ThreadSafeType))))),
                         cxxOperatorCallExpr(
                             hasOverloadedOperatorName("[]"),
-                            hasArgument(0, declRefExpr(to(equalsNode(Dec)))),
-                            anyOf(hasArgument(1, NonCollidingIndex),
-                                  hasParent(AtomicIntrinsicCall),
-                                  IsCastToRValueOrConst)),
-                        IsCastToRValueOrConst, AtomicIntrinsicCall)))))
-                    .bind("expr")),
+                            hasArgument(0, declRefExpr(to(equalsNode(Dec))))),
+                        AtomicIntrinsicCall))))))
+                .bind("expr")),
         Stm, Context);
 
     auto Mutations = llvm::SmallVector<const Stmt *, 4>{};
@@ -134,7 +122,6 @@ public:
 private:
   const Stmt &Stm;
   ASTContext &Context;
-  const llvm::SmallVector<const ValueDecl *, 4> &LoopVars;
 };
 
 llvm::SmallVector<const ValueDecl *, 4>
@@ -175,7 +162,7 @@ void addCapturedDeclsOf(const OMPExecutableDirective *const Directive,
         Decls.insert(Var->getDecl());
 }
 
-const auto DefaultThreadSafeTypes = "::std::atomic; ::std::atomic_ref";
+const auto DefaultThreadSafeTypes = "std::atomic; std::atomic_ref";
 } // namespace
 
 void UnprotectedSharedVariableAccessCheck::registerMatchers(
@@ -205,8 +192,7 @@ void UnprotectedSharedVariableAccessCheck::checkSharedVariable(
     return;
   }
 
-  auto MutationAnalyzer =
-      UnprotectedSharedVariableAccessAnalyzer(*Scope, Ctx, LoopVars);
+  auto MutationAnalyzer = UnprotectedSharedVariableAccessAnalyzer(*Scope, Ctx);
 
   const auto Mutations =
       MutationAnalyzer.findAllMutations(SharedVar, ThreadSafeTypes);

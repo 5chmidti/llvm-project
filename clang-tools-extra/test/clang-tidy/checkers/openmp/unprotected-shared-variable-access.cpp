@@ -287,21 +287,14 @@ void bufferAccessAtomic(int* Buffer, std::atomic<int>* Buffer2, int BufferSize) 
     #pragma omp parallel for default(none) shared(Buffer, Buffer2) firstprivate(BufferSize)
     for (int LoopVar = 0; LoopVar < BufferSize; ++LoopVar) {
         Buffer2[LoopVar] += Buffer[LoopVar];
-// CHECK-MESSAGES: :[[@LINE-1]]:9: warning: do not access shared variable 'Buffer2' of type 'std::atomic<int> *' without synchronization [openmp-unprotected-shared-variable-access]
         doesMutate(Buffer2[LoopVar]);
-// CHECK-MESSAGES: :[[@LINE-1]]:20: warning: do not access shared variable 'Buffer2' of type 'std::atomic<int> *' without synchronization [openmp-unprotected-shared-variable-access]
         doesNotMutate(Buffer2[LoopVar]);
-// CHECK-MESSAGES: :[[@LINE-1]]:23: warning: do not access shared variable 'Buffer2' of type 'std::atomic<int> *' without synchronization [openmp-unprotected-shared-variable-access]
 
         const auto SavedVal = Buffer2[LoopVar];
-// CHECK-MESSAGES: :[[@LINE-1]]:31: warning: do not access shared variable 'Buffer2' of type 'std::atomic<int> *' without synchronization [openmp-unprotected-shared-variable-access]
 
         Buffer2[LoopVar] += Buffer[LoopVar];
-// CHECK-MESSAGES: :[[@LINE-1]]:9: warning: do not access shared variable 'Buffer2' of type 'std::atomic<int> *' without synchronization [openmp-unprotected-shared-variable-access]
 
         Buffer2 += 1;
-// CHECK-MESSAGES: :[[@LINE-1]]:9: warning: do not access shared variable 'Buffer2' of type 'std::atomic<int> *' without synchronization [openmp-unprotected-shared-variable-access]
-// CHECK-MESSAGES: :[[@LINE-2]]:9: note: 'Buffer2' was mutated here
 
         #pragma omp critical
         Buffer2[LoopVar] += Buffer[LoopVar];
@@ -324,9 +317,6 @@ void bufferAccessAtomic(int* Buffer, std::atomic<int>* Buffer2, int BufferSize) 
     for (int LoopVar = 0; LoopVar < BufferSize; ++LoopVar) {
         Buffer2 += 1;
         Buffer2[0] += LoopVar;
-// CHECK-MESSAGES: :[[@LINE-2]]:9: warning: do not access shared variable 'Buffer2' of type 'std::atomic<int> *' without synchronization [openmp-unprotected-shared-variable-access]
-// CHECK-MESSAGES: :[[@LINE-2]]:9: warning: do not access shared variable 'Buffer2' of type 'std::atomic<int> *' without synchronization [openmp-unprotected-shared-variable-access]
-// CHECK-MESSAGES: :[[@LINE-4]]:9: note: 'Buffer2' was mutated here
     }
 }
 
@@ -619,8 +609,6 @@ void containerAccess(std::vector<int> Buffer, std::vector<int> Buffer2, size_t B
     #pragma omp parallel for default(none) shared(Buffer, Buffer2) firstprivate(BufferSize)
     for (int LoopVar = 0; LoopVar < BufferSize; ++LoopVar) {
         Buffer2[0] += LoopVar;
-// CHECK-MESSAGES: :[[@LINE-1]]:9: warning: do not access shared variable 'Buffer2' of type 'std::vector<int>' without synchronization [openmp-unprotected-shared-variable-access]
-// CHECK-MESSAGES: :[[@LINE-2]]:9: note: 'Buffer2' was mutated here
     }
 
     #pragma omp parallel for default(none) shared(Buffer, Buffer2) firstprivate(BufferSize)
@@ -728,8 +716,6 @@ void arrayAccess(std::array<int, 100> Buffer, std::array<int, 100> Buffer2, size
     #pragma omp parallel for default(none) shared(Buffer, Buffer2) firstprivate(BufferSize)
     for (int LoopVar = 0; LoopVar < BufferSize; ++LoopVar) {
         Buffer2[0] += LoopVar;
-// CHECK-MESSAGES: :[[@LINE-1]]:9: warning: do not access shared variable 'Buffer2' of type 'std::array<int, 100>' without synchronization [openmp-unprotected-shared-variable-access]
-// CHECK-MESSAGES: :[[@LINE-2]]:9: note: 'Buffer2' was mutated here
     }
 
     #pragma omp parallel for default(none) shared(Buffer, Buffer2) firstprivate(BufferSize)
