@@ -41,7 +41,8 @@ namespace clang::tidy::openmp {
 namespace {
 // NOLINTBEGIN(readability-identifier-naming)
 const ast_matchers::internal::MapAnyOfMatcher<
-    OMPCriticalDirective, OMPAtomicDirective, OMPOrderedDirective>
+    OMPCriticalDirective, OMPAtomicDirective, OMPOrderedDirective,
+    OMPMasterDirective, OMPSingleDirective>
     ompProtectedAccessDirective;
 // NOLINTEND(readability-identifier-naming)
 
