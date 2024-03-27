@@ -294,7 +294,11 @@ void UnprotectedSharedVariableAccessCheck::check(
 }
 
 void UnprotectedSharedVariableAccessCheck::storeOptions(
-    ClangTidyOptions::OptionMap &Opts) {}
+    ClangTidyOptions::OptionMap &Opts) {
+  Options.store(Opts, "ThreadSafeTypes",
+                utils::options::serializeStringList(ThreadSafeTypes));
+}
+
 UnprotectedSharedVariableAccessCheck::UnprotectedSharedVariableAccessCheck(
     StringRef Name, ClangTidyContext *Context)
     : ClangTidyCheck(Name, Context),
