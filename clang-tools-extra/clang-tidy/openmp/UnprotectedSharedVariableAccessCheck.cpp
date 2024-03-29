@@ -10,7 +10,6 @@
 #include "../utils/Matchers.h"
 #include "../utils/OptionsUtils.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/Support/raw_ostream.h"
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/ASTTypeTraits.h>
 #include <clang/AST/Decl.h>
@@ -44,6 +43,9 @@ const ast_matchers::internal::MapAnyOfMatcher<
     OMPCriticalDirective, OMPAtomicDirective, OMPOrderedDirective,
     OMPMasterDirective, OMPSingleDirective>
     ompProtectedAccessDirective;
+
+const internal::VariadicDynCastAllOfMatcher<OMPClause, OMPReductionClause>
+    ompReductionClause;
 // NOLINTEND(readability-identifier-naming)
 
 AST_MATCHER(CallExpr, isCallingAtomicBuiltin) {
@@ -56,6 +58,18 @@ AST_MATCHER(CallExpr, isCallingAtomicBuiltin) {
   default:
     return false;
   }
+}
+
+AST_MATCHER_P(OMPReductionClause, reducesVariable,
+              ast_matchers::internal::Matcher<ValueDecl>, Var) {
+  for (const Expr *const ReductionVar : Node.getVarRefs()) {
+    if (auto *const ReductionVarRef =
+            llvm::dyn_cast<DeclRefExpr>(ReductionVar)) {
+      if (Var.matches(*ReductionVarRef->getDecl(), Finder, Builder))
+        return true;
+    }
+  }
+  return false;
 }
 
 class UnprotectedSharedVariableAccessAnalyzer : private ExprMutationAnalyzer {
@@ -95,6 +109,9 @@ public:
         //
         ));
 
+    const auto IsAReductionVariable = hasAncestor(ompExecutableDirective(
+        hasAnyClause(ompReductionClause(reducesVariable(equalsNode(Dec))))));
+
     const auto Refs = match(
         findAll(traverse(
                     TK_IgnoreUnlessSpelledInSource,
@@ -112,7 +129,8 @@ public:
                             callExpr(
                                 callee(namedDecl(matchers::matchesAnyListedName(
                                     ThreadSafeFunctions)))),
-                            IsCastToRValueOrConst, AtomicIntrinsicCall))))))
+                            IsCastToRValueOrConst, AtomicIntrinsicCall)))),
+                        unless(IsAReductionVariable)))
                     .bind("expr")),
         Stm, Context);
 

@@ -134,6 +134,23 @@ void var(int* Buffer, int BufferSize) {
         Sum += Buffer[LoopVar];
     }
 
+    #pragma omp parallel for default(shared) shared(Buffer) firstprivate(BufferSize) reduction(+ : Sum)
+    for (int LoopVar = 0; LoopVar < BufferSize; ++LoopVar) {
+        Sum += Buffer[LoopVar];
+    }
+
+    #pragma omp parallel default(shared) shared(Buffer) firstprivate(BufferSize)
+    #pragma omp for reduction(+ : Sum)
+    for (int LoopVar = 0; LoopVar < BufferSize; ++LoopVar) {
+        Sum += Buffer[LoopVar];
+    }
+
+    #pragma omp parallel default(none) shared(Buffer, Sum) firstprivate(BufferSize)
+    #pragma omp for reduction(+ : Sum)
+    for (int LoopVar = 0; LoopVar < BufferSize; ++LoopVar) {
+        Sum += Buffer[LoopVar];
+    }
+
     #pragma omp parallel
     {
         int LocalSum = 0;
