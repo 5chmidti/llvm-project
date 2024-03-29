@@ -117,6 +117,10 @@ void var(int* Buffer, int BufferSize) {
 // CHECK-MESSAGES: :[[@LINE-6]]:20: note: 'Sum' was mutated here
     }
 
+    #pragma omp parallel
+        #pragma omp atomic write
+            Sum = 10;
+
     #pragma omp parallel for default(none) shared(Buffer, Sum) firstprivate(BufferSize)
     for (int LoopVar = 0; LoopVar < BufferSize; ++LoopVar) {
         doesNotMutate(Sum);

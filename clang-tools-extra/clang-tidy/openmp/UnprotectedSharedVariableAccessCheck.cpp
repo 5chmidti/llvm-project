@@ -41,7 +41,7 @@ namespace {
 // NOLINTBEGIN(readability-identifier-naming)
 const ast_matchers::internal::MapAnyOfMatcher<
     OMPCriticalDirective, OMPAtomicDirective, OMPOrderedDirective,
-    OMPMasterDirective, OMPSingleDirective>
+    OMPMasterDirective, OMPSingleDirective, OMPAtomicDirective>
     ompProtectedAccessDirective;
 
 const internal::VariadicDynCastAllOfMatcher<OMPClause, OMPReductionClause>
