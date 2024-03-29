@@ -46,6 +46,8 @@ const ast_matchers::internal::MapAnyOfMatcher<
 
 const internal::VariadicDynCastAllOfMatcher<OMPClause, OMPReductionClause>
     ompReductionClause;
+const internal::VariadicDynCastAllOfMatcher<OMPClause, OMPTaskReductionClause>
+    ompTaskReductionClause;
 // NOLINTEND(readability-identifier-naming)
 
 AST_MATCHER(CallExpr, isCallingAtomicBuiltin) {
@@ -60,8 +62,10 @@ AST_MATCHER(CallExpr, isCallingAtomicBuiltin) {
   }
 }
 
-AST_MATCHER_P(OMPReductionClause, reducesVariable,
-              ast_matchers::internal::Matcher<ValueDecl>, Var) {
+AST_POLYMORPHIC_MATCHER_P(
+    reducesVariable,
+    AST_POLYMORPHIC_SUPPORTED_TYPES(OMPReductionClause, OMPTaskReductionClause),
+    ast_matchers::internal::Matcher<ValueDecl>, Var) {
   for (const Expr *const ReductionVar : Node.getVarRefs()) {
     if (auto *const ReductionVarRef =
             llvm::dyn_cast<DeclRefExpr>(ReductionVar)) {
@@ -109,8 +113,10 @@ public:
         //
         ));
 
-    const auto IsAReductionVariable = hasAncestor(ompExecutableDirective(
-        hasAnyClause(ompReductionClause(reducesVariable(equalsNode(Dec))))));
+    const auto IsAReductionVariable = hasAncestor(ompExecutableDirective(anyOf(
+        hasAnyClause(ompReductionClause(reducesVariable(equalsNode(Dec)))),
+        hasAnyClause(
+            ompTaskReductionClause(reducesVariable(equalsNode(Dec)))))));
 
     const auto Refs = match(
         findAll(traverse(
