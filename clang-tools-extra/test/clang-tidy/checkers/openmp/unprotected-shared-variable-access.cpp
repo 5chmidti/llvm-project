@@ -1,4 +1,5 @@
-// RUN: %check_clang_tidy %s openmp-unprotected-shared-variable-access %t -- --extra-arg=-fopenmp
+// RUN: %check_clang_tidy -check-suffix=,NOTMARKED %s openmp-unprotected-shared-variable-access %t -- --extra-arg=-fopenmp
+// RUN: %check_clang_tidy %s openmp-unprotected-shared-variable-access %t -- -config="{CheckOptions: {openmp-unprotected-shared-variable-access.ThreadSafeFunctions: 'threadSafeFunctionByValue;threadSafeFunctionByRef;threadSafeFunctionByConstRef'}}" --extra-arg=-fopenmp
 
 using size_t = unsigned long;
 
@@ -762,5 +763,32 @@ void arrayAccessConst(const std::array<int, 100> Buffer, const std::array<int, 1
     #pragma omp parallel for default(none) shared(Buffer, Buffer2) firstprivate(BufferSize)
     for (int LoopVar = 0; LoopVar < BufferSize; ++LoopVar) {
         auto Val = Buffer[0];
+    }
+}
+
+struct Type {};
+void threadSafeFunctionByValue(Type);
+void threadSafeFunctionByRef(Type&);
+void threadSafeFunctionByConstRef(const Type&);
+
+void threadSafeFunctionByValue2(int, Type);
+void threadSafeFunctionByRef2(int, Type&);
+void threadSafeFunctionByConstRef2(int, const Type&);
+
+void threadSafeFunctions(Type value) {
+    #pragma omp parallel
+    {
+        threadSafeFunctionByValue(value);
+// CHECK-MESSAGES-NOTMARKED: :[[@LINE-1]]:35: warning: do not access shared variable 'value' of type 'Type' without synchronization [openmp-unprotected-shared-variable-access]
+        threadSafeFunctionByRef(value);
+// CHECK-MESSAGES-NOTMARKED: :[[@LINE-1]]:33: warning: do not access shared variable 'value' of type 'Type' without synchronization [openmp-unprotected-shared-variable-access]
+        threadSafeFunctionByConstRef(value);
+// CHECK-MESSAGES-NOTMARKED: :[[@LINE-1]]:38: warning: do not access shared variable 'value' of type 'Type' without synchronization [openmp-unprotected-shared-variable-access]
+        threadSafeFunctionByValue2(0, value);
+// CHECK-MESSAGES-NOTMARKED: :[[@LINE-1]]:39: warning: do not access shared variable 'value' of type 'Type' without synchronization [openmp-unprotected-shared-variable-access]
+        threadSafeFunctionByRef2(0, value);
+// CHECK-MESSAGES-NOTMARKED: :[[@LINE-1]]:37: warning: do not access shared variable 'value' of type 'Type' without synchronization [openmp-unprotected-shared-variable-access]
+        threadSafeFunctionByConstRef2(0, value);
+// CHECK-MESSAGES-NOTMARKED: :[[@LINE-1]]:42: warning: do not access shared variable 'value' of type 'Type' without synchronization [openmp-unprotected-shared-variable-access]
     }
 }

@@ -41,6 +41,7 @@ private:
                       const llvm::SmallVector<const ValueDecl *, 4> &LoopVars);
 
   std::vector<StringRef> ThreadSafeTypes;
+  std::vector<StringRef> ThreadSafeFunctions;
 };
 
 } // namespace clang::tidy::openmp

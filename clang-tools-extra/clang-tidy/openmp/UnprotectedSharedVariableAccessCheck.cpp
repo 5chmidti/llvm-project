@@ -65,7 +65,8 @@ public:
 
   llvm::SmallVector<const Stmt *, 4>
   findAllMutations(const ValueDecl *const Dec,
-                   const llvm::ArrayRef<llvm::StringRef> &ThreadSafeTypes) {
+                   const llvm::ArrayRef<llvm::StringRef> &ThreadSafeTypes,
+                   const llvm::ArrayRef<llvm::StringRef> &ThreadSafeFunctions) {
     const auto ThreadSafeType = qualType(anyOf(
         atomicType(),
         qualType(matchers::matchesAnyListedTypeName(ThreadSafeTypes)),
@@ -108,6 +109,9 @@ public:
                             unaryOperator(hasOperatorName("&"),
                                           hasUnaryOperand(Var),
                                           hasParent(AtomicIntrinsicCall)),
+                            callExpr(
+                                callee(namedDecl(matchers::matchesAnyListedName(
+                                    ThreadSafeFunctions)))),
                             IsCastToRValueOrConst, AtomicIntrinsicCall))))))
                     .bind("expr")),
         Stm, Context);
@@ -165,6 +169,7 @@ void addCapturedDeclsOf(const OMPExecutableDirective *const Directive,
 }
 
 const auto DefaultThreadSafeTypes = "std::atomic; std::atomic_ref";
+const auto DefaultThreadSafeFunctions = "";
 } // namespace
 
 void UnprotectedSharedVariableAccessCheck::registerMatchers(
@@ -196,8 +201,8 @@ void UnprotectedSharedVariableAccessCheck::checkSharedVariable(
 
   auto MutationAnalyzer = UnprotectedSharedVariableAccessAnalyzer(*Scope, Ctx);
 
-  const auto Mutations =
-      MutationAnalyzer.findAllMutations(SharedVar, ThreadSafeTypes);
+  const auto Mutations = MutationAnalyzer.findAllMutations(
+      SharedVar, ThreadSafeTypes, ThreadSafeFunctions);
   if (Mutations.empty()) {
     return;
   }
@@ -285,11 +290,15 @@ void UnprotectedSharedVariableAccessCheck::storeOptions(
     ClangTidyOptions::OptionMap &Opts) {
   Options.store(Opts, "ThreadSafeTypes",
                 utils::options::serializeStringList(ThreadSafeTypes));
+  Options.store(Opts, "ThreadSafeFunctions",
+                utils::options::serializeStringList(ThreadSafeFunctions));
 }
 
 UnprotectedSharedVariableAccessCheck::UnprotectedSharedVariableAccessCheck(
     StringRef Name, ClangTidyContext *Context)
     : ClangTidyCheck(Name, Context),
       ThreadSafeTypes(utils::options::parseStringList(
-          Options.get("ThreadSafeTypes", DefaultThreadSafeTypes))) {}
+          Options.get("ThreadSafeTypes", DefaultThreadSafeTypes))),
+      ThreadSafeFunctions(utils::options::parseStringList(
+          Options.get("ThreadSafeFunctions", DefaultThreadSafeFunctions))) {}
 } // namespace clang::tidy::openmp
