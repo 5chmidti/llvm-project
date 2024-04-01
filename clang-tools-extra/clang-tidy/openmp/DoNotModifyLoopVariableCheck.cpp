@@ -107,10 +107,13 @@ public:
                        llvm::SmallVector<const DeclRefExpr *, 4>, 4>
       IterConditionVars{};
   ASTContext &Ctx;
-  ast_matchers::internal::BindableMatcher<Stmt> LoopIterVar = stmt(
-      anyOf(declStmt(has(varDecl().bind("var"))),
-            binaryOperator(isAssignmentOperator(),
-                           hasLHS(declRefExpr(to(varDecl().bind("var")))))));
+  ast_matchers::internal::BindableMatcher<Stmt> LoopIterVar = stmt(anyOf(
+      declStmt(has(
+          varDecl(hasType(qualType(unless(isConstQualified())))).bind("var"))),
+      binaryOperator(isAssignmentOperator(),
+                     hasLHS(declRefExpr(to(
+                         varDecl(hasType(qualType(unless(isConstQualified()))))
+                             .bind("var")))))));
 };
 
 class AllMutationsFinder : private ExprMutationAnalyzer {
