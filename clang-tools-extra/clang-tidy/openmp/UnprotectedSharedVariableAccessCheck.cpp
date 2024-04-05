@@ -153,8 +153,7 @@ private:
 
 llvm::SmallVector<const ValueDecl *, 4>
 getIterationVariablesOfDirective(const OMPExecutableDirective *const Directive,
-                                 const size_t NumLoopsToCheck,
-                                 ASTContext &Ctx) {
+                                 const size_t NumLoopsToCheckx) {
   llvm::SmallVector<const DeclRefExpr *, 4> Result{};
   if (const auto *const LoopDirective =
           llvm::dyn_cast<OMPLoopDirective>(Directive)) {
@@ -246,7 +245,7 @@ void UnprotectedSharedVariableAccessCheck::check(
       getOptCollapseNum(CollapseClause, Ctx).value_or(1U);
 
   const auto LoopIterVars =
-      getIterationVariablesOfDirective(Directive, NumLoopsToCheck, Ctx);
+      getIterationVariablesOfDirective(Directive, NumLoopsToCheck);
 
   if (Directive->getNumClauses() == 0) {
     // If no clause is present, sharing is enabled by default, and we need to
