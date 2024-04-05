@@ -20,6 +20,7 @@ add_clang_library(clangTidyUtils
   LexerUtils.cpp
   Matchers.cpp
   NamespaceAliaser.cpp
+  OpenMP.cpp
   OptionsUtils.cpp
   RenamerClangTidyCheck.cpp
   TransformerClangTidyCheck.cpp
