@@ -121,16 +121,18 @@ public:
   AllMutationsFinder(const Stmt &Stm, ASTContext &Context)
       : ExprMutationAnalyzer(Stm, Context), Stm(Stm), Context(Context) {}
   llvm::SmallVector<const Stmt *, 4> findAllMutations(const Decl *const Dec) {
-    const auto Refs = match(
-        findAll(declRefExpr(
-                    to(
-                        // `Dec` or a binding if `Dec` is a decomposition.
-                        anyOf(equalsNode(Dec),
-                              bindingDecl(forDecomposition(equalsNode(Dec))))
-                        //
-                        ))
-                    .bind("expr")),
-        Stm, Context);
+    const auto Var = declRefExpr(to(
+        // `Dec` or a binding if `Dec` is a decomposition.
+        anyOf(equalsNode(Dec), bindingDecl(forDecomposition(equalsNode(Dec))))
+        //
+        ));
+
+    const auto Refs =
+        match(findAll(declRefExpr(Var, unless(hasParent(cxxOperatorCallExpr(
+                                           hasOverloadedOperatorName("[]"),
+                                           hasArgument(0, Var)))))
+                          .bind("expr")),
+              Stm, Context);
 
     auto Mutations = llvm::SmallVector<const Stmt *, 4>{};
     for (const auto &RefNodes : Refs) {
