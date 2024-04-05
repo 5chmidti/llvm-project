@@ -8,6 +8,7 @@
 
 #include "UnprotectedSharedVariableAccessCheck.h"
 #include "../utils/Matchers.h"
+#include "../utils/OpenMP.h"
 #include "../utils/OptionsUtils.h"
 #include "llvm/ADT/StringRef.h"
 #include <clang/AST/ASTContext.h>
@@ -43,11 +44,6 @@ const ast_matchers::internal::MapAnyOfMatcher<
     OMPCriticalDirective, OMPAtomicDirective, OMPOrderedDirective,
     OMPMasterDirective, OMPSingleDirective, OMPAtomicDirective>
     ompProtectedAccessDirective;
-
-const internal::VariadicDynCastAllOfMatcher<OMPClause, OMPReductionClause>
-    ompReductionClause;
-const internal::VariadicDynCastAllOfMatcher<OMPClause, OMPTaskReductionClause>
-    ompTaskReductionClause;
 // NOLINTEND(readability-identifier-naming)
 
 AST_MATCHER(CallExpr, isCallingAtomicBuiltin) {
@@ -181,17 +177,6 @@ std::optional<size_t> getOptCollapseNum(const OMPCollapseClause *const Collapse,
   return std::nullopt;
 }
 
-template <typename ClauseKind>
-void addCapturedDeclsOf(const OMPExecutableDirective *const Directive,
-                        llvm::SmallPtrSet<const ValueDecl *, 4> &Decls) {
-  if (const auto *const Clause =
-          Directive->template getSingleClause<ClauseKind>())
-    for (const auto *const ClauseChild : Clause->children())
-      if (const auto Var = llvm::dyn_cast<DeclRefExpr>(ClauseChild);
-          Var && !Var->refersToEnclosingVariableOrCapture())
-        Decls.insert(Var->getDecl());
-}
-
 const auto DefaultThreadSafeTypes = "std::atomic; std::atomic_ref";
 const auto DefaultThreadSafeFunctions = "";
 } // namespace
@@ -274,31 +259,7 @@ void UnprotectedSharedVariableAccessCheck::check(
     return;
   }
 
-  llvm::SmallPtrSet<const ValueDecl *, 4> PossiblySharedDecls{};
-
-  // The OMPDefaultClause does not provide a way to know which decls get
-  // captured, therefore, we add all captured decls to DeclsToCheck and remove
-  // all decls that are from `private` and `firstprivate` clauses.
-  llvm::SmallPtrSet<const ValueDecl *, 4> DeclsToSkip{};
-
-  addCapturedDeclsOf<OMPSharedClause>(Directive, PossiblySharedDecls);
-  addCapturedDeclsOf<OMPFirstprivateClause>(Directive, DeclsToSkip);
-  addCapturedDeclsOf<OMPPrivateClause>(Directive, DeclsToSkip);
-
-  if (const auto *const DefaultClause =
-          Directive->getSingleClause<OMPDefaultClause>();
-      DefaultClause && DefaultClause->getDefaultKind() ==
-                           llvm::omp::DefaultKind::OMP_DEFAULT_shared)
-    for (const auto *const Child : Directive->children())
-      if (const auto *const Capture = llvm::dyn_cast<CapturedStmt>(Child))
-        for (const auto *const InnerCapture : Capture->children())
-          if (const auto *const DRef =
-                  llvm::dyn_cast<DeclRefExpr>(InnerCapture);
-              DRef && !DRef->refersToEnclosingVariableOrCapture())
-            PossiblySharedDecls.insert(DRef->getDecl());
-
-  const auto SharedDecls =
-      llvm::set_difference(PossiblySharedDecls, DeclsToSkip);
+  const auto SharedDecls = openmp::getSharedVariables(Directive);
 
   for (const ValueDecl *const SharedDecl : SharedDecls)
     if (match(valueDecl(hasType(qualType(anyOf(

@@ -7,3 +7,78 @@
 //===----------------------------------------------------------------------===//
 
 #include "OpenMP.h"
+#include "clang/AST/Decl.h"
+#include "clang/AST/OpenMPClause.h"
+#include "clang/AST/StmtOpenMP.h"
+
+template <typename ClauseKind>
+void addCapturedDeclsOf(const clang::OMPExecutableDirective *const Directive,
+                        llvm::SmallPtrSet<const clang::ValueDecl *, 4> &Decls) {
+  if (const auto *const Clause =
+          Directive->template getSingleClause<ClauseKind>())
+    for (const auto *const ClauseChild : Clause->children())
+      if (const auto Var = llvm::dyn_cast<clang::DeclRefExpr>(ClauseChild);
+          Var && !Var->refersToEnclosingVariableOrCapture())
+        Decls.insert(Var->getDecl());
+}
+
+template <typename ClauseKind>
+void eraseCapturedDeclsOf(
+    const clang::OMPExecutableDirective *const Directive,
+    llvm::SmallPtrSet<const clang::ValueDecl *, 4> &Decls) {
+  if (const auto *const Clause =
+          Directive->template getSingleClause<ClauseKind>())
+    for (const auto *const ClauseChild : Clause->children())
+      if (const auto Var = llvm::dyn_cast<clang::DeclRefExpr>(ClauseChild);
+          Var && !Var->refersToEnclosingVariableOrCapture())
+        Decls.erase(Var->getDecl());
+}
+
+namespace clang::tidy::openmp {
+const ast_matchers::internal::VariadicDynCastAllOfMatcher<OMPClause,
+                                                          OMPReductionClause>
+    ompReductionClause;
+const ast_matchers::internal::VariadicDynCastAllOfMatcher<
+    OMPClause, OMPTaskReductionClause>
+    ompTaskReductionClause;
+
+const ast_matchers::internal::MapAnyOfMatcherImpl<
+    OMPClause, OMPFirstprivateClause, OMPPrivateClause, OMPLastprivateClause,
+    OMPLinearClause, OMPReductionClause, OMPTaskReductionClause,
+    OMPInReductionClause>
+    ompPrivatizationClause;
+
+llvm::SmallPtrSet<const clang::ValueDecl *, 4>
+clang::tidy::openmp::getSharedVariables(
+    const OMPExecutableDirective *Directive) {
+  llvm::SmallPtrSet<const ValueDecl *, 4> PossiblySharedDecls{};
+
+  // The OMPDefaultClause does not provide a way to know which decls get
+  // captured, therefore, we add all captured decls to DeclsToCheck and remove
+  // all decls that are from clause that privatize variables.
+  llvm::SmallPtrSet<const ValueDecl *, 4> DeclsToSkip{};
+
+  addCapturedDeclsOf<OMPSharedClause>(Directive, PossiblySharedDecls);
+  if (const auto *const DefaultClause =
+          Directive->getSingleClause<OMPDefaultClause>();
+      !DefaultClause || DefaultClause->getDefaultKind() ==
+                            llvm::omp::DefaultKind::OMP_DEFAULT_shared)
+    for (const auto *const Child : Directive->children())
+      if (const auto *const Capture = llvm::dyn_cast<CapturedStmt>(Child))
+        for (const auto *const InnerCapture : Capture->children())
+          if (const auto *const DRef =
+                  llvm::dyn_cast_if_present<DeclRefExpr>(InnerCapture);
+              DRef && !DRef->refersToEnclosingVariableOrCapture())
+            PossiblySharedDecls.insert(DRef->getDecl());
+
+  eraseCapturedDeclsOf<OMPFirstprivateClause>(Directive, PossiblySharedDecls);
+  eraseCapturedDeclsOf<OMPPrivateClause>(Directive, PossiblySharedDecls);
+  eraseCapturedDeclsOf<OMPLastprivateClause>(Directive, PossiblySharedDecls);
+  eraseCapturedDeclsOf<OMPLinearClause>(Directive, PossiblySharedDecls);
+  eraseCapturedDeclsOf<OMPReductionClause>(Directive, PossiblySharedDecls);
+  eraseCapturedDeclsOf<OMPTaskReductionClause>(Directive, PossiblySharedDecls);
+  eraseCapturedDeclsOf<OMPInReductionClause>(Directive, PossiblySharedDecls);
+
+  return PossiblySharedDecls;
+}
+} // namespace clang::tidy::openmp
