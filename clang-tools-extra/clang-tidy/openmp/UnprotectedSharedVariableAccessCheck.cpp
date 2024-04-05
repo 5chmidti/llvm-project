@@ -42,7 +42,8 @@ namespace {
 // NOLINTBEGIN(readability-identifier-naming)
 const ast_matchers::internal::MapAnyOfMatcher<
     OMPCriticalDirective, OMPAtomicDirective, OMPOrderedDirective,
-    OMPMasterDirective, OMPSingleDirective, OMPAtomicDirective>
+    OMPMasterDirective, OMPSingleDirective, OMPAtomicDirective,
+    OMPFlushDirective>
     ompProtectedAccessDirective;
 // NOLINTEND(readability-identifier-naming)
 
