@@ -15,6 +15,7 @@
 #include "DoNotModifyLoopVariableCheck.h"
 #include "ExceptionEscapeCheck.h"
 #include "MissingForInParallelDirectiveBeforeForLoopCheck.h"
+#include "ReduceSynchronizationOverheadCheck.h"
 #include "SpecifyScheduleCheck.h"
 #include "UnprotectedSharedVariableAccessCheck.h"
 #include "UseDefaultNoneCheck.h"
@@ -40,6 +41,8 @@ public:
     CheckFactories
         .registerCheck<MissingForInParallelDirectiveBeforeForLoopCheck>(
             "openmp-missing-for-in-parallel-directive-before-for-loop");
+    CheckFactories.registerCheck<ReduceSynchronizationOverheadCheck>(
+        "openmp-reduce-synchronization-overhead");
     CheckFactories.registerCheck<SpecifyScheduleCheck>(
         "openmp-specify-schedule");
     CheckFactories.registerCheck<UnprotectedSharedVariableAccessCheck>(

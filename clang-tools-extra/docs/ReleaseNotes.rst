@@ -144,6 +144,11 @@ New checks
   Finds OpenMP parallel directives where the next statement is a for loop,
   and the ``parallel`` directive is not a ``parallel for`` directive.
 
+- New :doc:`openmp-reduce-synchronization-overhead
+  <clang-tidy/checks/openmp/reduce-synchronization-overhead>` check.
+
+  Finds OpenMP critical sections that can be replaced with atomic sections.
+
 - New :doc:`openmp-specify-schedule
   <clang-tidy/checks/openmp/specify-schedule>` check.
 
