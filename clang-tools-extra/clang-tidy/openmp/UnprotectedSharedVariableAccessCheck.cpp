@@ -181,16 +181,13 @@ public:
     if (IsUnprotected)
       Results[DRef->getDecl()].UnprotectedAcesses.insert(DRef);
 
-    if (isMutating(DRef, ThreadSafeTypes, ThreadSafeFunctions))
+    if (isMutating(DRef))
       Results[DRef->getDecl()].Mutations.insert(DRef);
 
     return true;
   }
 
-  bool
-  isMutating(const DeclRefExpr *DRef,
-             const llvm::ArrayRef<llvm::StringRef> &ThreadSafeTypes,
-             const llvm::ArrayRef<llvm::StringRef> &ThreadSafeFunctions) const {
+  bool isMutating(const DeclRefExpr *DRef) const {
     if (State.DirectiveStack.empty())
       return false;
     const ValueDecl *Dec = DRef->getDecl();
