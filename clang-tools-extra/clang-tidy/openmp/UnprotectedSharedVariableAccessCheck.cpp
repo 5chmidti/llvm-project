@@ -238,7 +238,7 @@ public:
                                    ThreadSafeFunctions)))),
                            IsCastToRValueOrConst, AtomicIntrinsicCall)))))
                        .bind("dref")),
-               Ctx)
+               *DRef, Ctx)
              .empty();
 
     if (!ShouldBeDiagnosed)
