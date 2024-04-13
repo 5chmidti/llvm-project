@@ -17,8 +17,7 @@ void addCapturedDeclsOf(const clang::OMPExecutableDirective *const Directive,
   if (const auto *const Clause =
           Directive->template getSingleClause<ClauseKind>())
     for (const auto *const ClauseChild : Clause->children())
-      if (const auto Var = llvm::dyn_cast<clang::DeclRefExpr>(ClauseChild);
-          Var && !Var->refersToEnclosingVariableOrCapture())
+      if (const auto Var = llvm::dyn_cast<clang::DeclRefExpr>(ClauseChild))
         Decls.insert(Var->getDecl());
 }
 
@@ -49,14 +48,12 @@ const ast_matchers::internal::MapAnyOfMatcherImpl<
     ompPrivatizationClause;
 
 llvm::SmallPtrSet<const clang::ValueDecl *, 4>
-clang::tidy::openmp::getSharedVariables(
-    const OMPExecutableDirective *Directive) {
+getSharedVariables(const OMPExecutableDirective *Directive) {
   llvm::SmallPtrSet<const ValueDecl *, 4> PossiblySharedDecls{};
 
   // The OMPDefaultClause does not provide a way to know which decls get
   // captured, therefore, we add all captured decls to DeclsToCheck and remove
   // all decls that are from clause that privatize variables.
-  llvm::SmallPtrSet<const ValueDecl *, 4> DeclsToSkip{};
 
   addCapturedDeclsOf<OMPSharedClause>(Directive, PossiblySharedDecls);
   if (const auto *const DefaultClause =
@@ -80,5 +77,25 @@ clang::tidy::openmp::getSharedVariables(
   eraseCapturedDeclsOf<OMPInReductionClause>(Directive, PossiblySharedDecls);
 
   return PossiblySharedDecls;
+}
+
+llvm::SmallPtrSet<const clang::ValueDecl *, 4>
+getPrivatizedVariables(const OMPExecutableDirective *Directive) {
+  llvm::SmallPtrSet<const clang::ValueDecl *, 4> Decls;
+
+  addCapturedDeclsOf<OMPFirstprivateClause>(Directive, Decls);
+  addCapturedDeclsOf<OMPPrivateClause>(Directive, Decls);
+  addCapturedDeclsOf<OMPLastprivateClause>(Directive, Decls);
+  addCapturedDeclsOf<OMPLinearClause>(Directive, Decls);
+  addCapturedDeclsOf<OMPReductionClause>(Directive, Decls);
+  addCapturedDeclsOf<OMPTaskReductionClause>(Directive, Decls);
+  addCapturedDeclsOf<OMPInReductionClause>(Directive, Decls);
+
+  return Decls;
+}
+
+SharedAndPrivateVariables
+getSharedAndPrivateVariable(const OMPExecutableDirective *Directive) {
+  return {getSharedVariables(Directive), getPrivatizedVariables(Directive)};
 }
 } // namespace clang::tidy::openmp

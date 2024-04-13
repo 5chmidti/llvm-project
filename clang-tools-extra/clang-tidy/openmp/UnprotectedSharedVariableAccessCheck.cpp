@@ -10,7 +10,6 @@
 #include "../utils/Matchers.h"
 #include "../utils/OpenMP.h"
 #include "../utils/OptionsUtils.h"
-#include "llvm/ADT/StringRef.h"
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/ASTTypeTraits.h>
 #include <clang/AST/Decl.h>
@@ -28,12 +27,16 @@
 #include <clang/Analysis/Analyses/ExprMutationAnalyzer.h>
 #include <clang/Basic/Builtins.h>
 #include <clang/Basic/DiagnosticIDs.h>
+#include <cstddef>
+#include <llvm/ADT/MapVector.h>
+#include <llvm/ADT/STLExtras.h>
 #include <llvm/ADT/SetOperations.h>
 #include <llvm/ADT/SmallPtrSet.h>
 #include <llvm/ADT/SmallVector.h>
+#include <llvm/ADT/StringRef.h>
 #include <llvm/Frontend/OpenMP/OMPConstants.h>
 #include <llvm/Support/Casting.h>
-#include <optional>
+#include <utility>
 
 using namespace clang::ast_matchers;
 
@@ -42,8 +45,7 @@ namespace {
 // NOLINTBEGIN(readability-identifier-naming)
 const ast_matchers::internal::MapAnyOfMatcher<
     OMPCriticalDirective, OMPAtomicDirective, OMPOrderedDirective,
-    OMPMasterDirective, OMPSingleDirective, OMPAtomicDirective,
-    OMPFlushDirective>
+    OMPMasterDirective, OMPSingleDirective, OMPFlushDirective>
     ompProtectedAccessDirective;
 // NOLINTEND(readability-identifier-naming)
 
@@ -59,37 +61,144 @@ AST_MATCHER(CallExpr, isCallingAtomicBuiltin) {
   }
 }
 
-AST_POLYMORPHIC_MATCHER_P(
-    reducesVariable,
-    AST_POLYMORPHIC_SUPPORTED_TYPES(OMPReductionClause, OMPTaskReductionClause),
-    ast_matchers::internal::Matcher<ValueDecl>, Var) {
-  for (const Expr *const ReductionVar : Node.getVarRefs()) {
-    if (auto *const ReductionVarRef =
-            llvm::dyn_cast<DeclRefExpr>(ReductionVar)) {
-      if (Var.matches(*ReductionVarRef->getDecl(), Finder, Builder))
-        return true;
-    }
-  }
-  return false;
-}
-
-class UnprotectedSharedVariableAccessAnalyzer : private ExprMutationAnalyzer {
+class Visitor : public RecursiveASTVisitor<Visitor> {
 public:
-  UnprotectedSharedVariableAccessAnalyzer(const Stmt &Stm, ASTContext &Context)
-      : ExprMutationAnalyzer(Stm, Context), Stm(Stm), Context(Context) {}
+  Visitor(ASTContext &Ctx, llvm::ArrayRef<llvm::StringRef> ThreadSafeTypes,
+          llvm::ArrayRef<llvm::StringRef> ThreadSafeFunctions)
+      : Ctx(Ctx), ThreadSafeTypes(ThreadSafeTypes),
+        ThreadSafeFunctions(ThreadSafeFunctions) {}
 
-  llvm::SmallVector<const Stmt *, 4>
-  findAllMutations(const ValueDecl *const Dec,
-                   const llvm::ArrayRef<llvm::StringRef> &ThreadSafeTypes,
-                   const llvm::ArrayRef<llvm::StringRef> &ThreadSafeFunctions) {
+  using Base = RecursiveASTVisitor<Visitor>;
+  struct StackValue {
+    const OMPExecutableDirective *Directive;
+    openmp::SharedAndPrivateVariables SharedAndPrivateVars;
+  };
+  struct AnalysisResult {
+    llvm::SmallPtrSet<const DeclRefExpr *, 4> Mutations;
+    llvm::SmallPtrSet<const DeclRefExpr *, 4> UnprotectedAcesses;
+  };
+
+  class SharedVariableState {
+  public:
+    void add(const OMPExecutableDirective *Directive,
+             openmp::SharedAndPrivateVariables SharedAndPrivateVars) {
+      for (const ValueDecl *SharedVar : SharedAndPrivateVars.Shared) {
+        auto *const Iter = llvm::find_if(
+            CurrentSharedVariables, [SharedVar](const auto &VarAndCount) {
+              return VarAndCount.first == SharedVar;
+            });
+        if (Iter != CurrentSharedVariables.end())
+          ++Iter->second;
+        else
+          CurrentSharedVariables.emplace_back(SharedVar, 1U);
+      }
+
+      llvm::SmallVector<std::pair<const ValueDecl *, size_t>>
+          PrivatizedVariables;
+
+      for (const ValueDecl *PrivateVar : SharedAndPrivateVars.Private) {
+        auto *const Iter = llvm::find_if(
+            CurrentSharedVariables, [PrivateVar](const auto &VarAndCount) {
+              return VarAndCount.first == PrivateVar;
+            });
+        if (Iter != CurrentSharedVariables.end()) {
+          PrivatizedVariables.push_back(*Iter);
+          CurrentSharedVariables.erase(Iter);
+        }
+      }
+
+      SharedVarsSTack.push_back(SharedAndPrivateVars.Shared);
+      PrivatizedVarsStack.push_back(PrivatizedVariables);
+      DirectiveStack.push_back(Directive);
+    }
+
+    void pop() {
+      CurrentSharedVariables.append(PrivatizedVarsStack.back());
+      PrivatizedVarsStack.pop_back();
+      const llvm::SmallPtrSet<const ValueDecl *, 4> &LatestSharedScopeChange =
+          SharedVarsSTack.back();
+      for (const ValueDecl *const SharedVar : LatestSharedScopeChange) {
+        auto *const Iter = llvm::find_if(
+            CurrentSharedVariables, [SharedVar](const auto &VarAndCount) {
+              return VarAndCount.first == SharedVar;
+            });
+        if (Iter != CurrentSharedVariables.end()) {
+          --Iter->second;
+          if (Iter->second == 0)
+            CurrentSharedVariables.erase(Iter);
+        }
+      }
+      SharedVarsSTack.pop_back();
+      DirectiveStack.pop_back();
+    }
+
+    bool isShared(const DeclRefExpr *DRef) const {
+      return isShared(DRef->getDecl());
+    }
+
+    bool isShared(const ValueDecl *Var) const {
+      return llvm::find_if(CurrentSharedVariables,
+                           [Var](const auto &SharedVarWithCount) {
+                             return SharedVarWithCount.first == Var;
+                           }) != CurrentSharedVariables.end();
+    }
+
+    // private:
+    llvm::SmallVector<std::pair<const ValueDecl *, size_t>>
+        CurrentSharedVariables;
+    llvm::SmallVector<llvm::SmallPtrSet<const ValueDecl *, 4>> SharedVarsSTack;
+    llvm::SmallVector<llvm::SmallVector<std::pair<const ValueDecl *, size_t>>>
+        PrivatizedVarsStack;
+    llvm::SmallVector<const OMPExecutableDirective *> DirectiveStack;
+  };
+
+  bool TraverseOMPExecutableDirective(OMPExecutableDirective *Directive) {
+    if (Directive->isStandaloneDirective())
+      return true;
+
+    const openmp::SharedAndPrivateVariables SharedAndPrivateVars =
+        openmp::getSharedAndPrivateVariable(Directive);
+
+    State.add(Directive, SharedAndPrivateVars);
+    Stmt *Statement = Directive->getStructuredBlock();
+    Base::TraverseStmt(Statement);
+    State.pop();
+    return true;
+  }
+
+  bool TraverseCapturedStmt(CapturedStmt *S) { return true; }
+
+  bool TraverseDeclRefExpr(DeclRefExpr *DRef) {
+    if (!State.isShared(DRef))
+      return true;
+
+    // FIXME: can use traversal to know if there is an ancestor
+    const bool IsUnprotected =
+        match(declRefExpr(hasAncestor(ompProtectedAccessDirective())), *DRef,
+              Ctx)
+            .empty();
+
+    if (IsUnprotected)
+      Results[DRef->getDecl()].UnprotectedAcesses.insert(DRef);
+
+    if (isMutating(DRef, ThreadSafeTypes, ThreadSafeFunctions))
+      Results[DRef->getDecl()].Mutations.insert(DRef);
+
+    return true;
+  }
+
+  bool
+  isMutating(const DeclRefExpr *DRef,
+             const llvm::ArrayRef<llvm::StringRef> &ThreadSafeTypes,
+             const llvm::ArrayRef<llvm::StringRef> &ThreadSafeFunctions) const {
+    if (State.DirectiveStack.empty())
+      return false;
+    const ValueDecl *Dec = DRef->getDecl();
+
     const auto ThreadSafeType = qualType(anyOf(
         atomicType(),
         qualType(matchers::matchesAnyListedTypeName(ThreadSafeTypes)),
         hasCanonicalType(matchers::matchesAnyListedTypeName(ThreadSafeTypes))));
-
-    if (!match(ThreadSafeType, Dec->getType(), Context).empty()) {
-      return {};
-    }
 
     const auto CollidingIndex =
         expr(anyOf(declRefExpr(to(varDecl(
@@ -110,72 +219,45 @@ public:
         //
         ));
 
-    const auto IsAReductionVariable = hasAncestor(ompExecutableDirective(anyOf(
-        hasAnyClause(ompReductionClause(reducesVariable(equalsNode(Dec)))),
-        hasAnyClause(
-            ompTaskReductionClause(reducesVariable(equalsNode(Dec)))))));
+    const bool ShouldBeDiagnosed =
+        !match(traverse(
+                   TK_IgnoreUnlessSpelledInSource,
+                   declRefExpr(
+                       Var,
+                       unless(hasParent(expr(anyOf(
+                           arraySubscriptExpr(
+                               unless(allOf(hasIndex(CollidingIndex),
+                                            unless(hasType(ThreadSafeType))))),
+                           cxxOperatorCallExpr(hasOverloadedOperatorName("[]"),
+                                               hasArgument(0, Var)),
+                           unaryOperator(hasOperatorName("&"),
+                                         hasUnaryOperand(Var),
+                                         hasParent(AtomicIntrinsicCall)),
+                           callExpr(
+                               callee(namedDecl(matchers::matchesAnyListedName(
+                                   ThreadSafeFunctions)))),
+                           IsCastToRValueOrConst, AtomicIntrinsicCall)))))
+                       .bind("dref")),
+               Ctx)
+             .empty();
 
-    const auto Refs = match(
-        findAll(traverse(
-                    TK_IgnoreUnlessSpelledInSource,
-                    declRefExpr(
-                        Var,
-                        unless(hasParent(expr(anyOf(
-                            arraySubscriptExpr(
-                                unless(allOf(hasIndex(CollidingIndex),
-                                             unless(hasType(ThreadSafeType))))),
-                            cxxOperatorCallExpr(hasOverloadedOperatorName("[]"),
-                                                hasArgument(0, Var)),
-                            unaryOperator(hasOperatorName("&"),
-                                          hasUnaryOperand(Var),
-                                          hasParent(AtomicIntrinsicCall)),
-                            callExpr(
-                                callee(namedDecl(matchers::matchesAnyListedName(
-                                    ThreadSafeFunctions)))),
-                            IsCastToRValueOrConst, AtomicIntrinsicCall)))),
-                        unless(IsAReductionVariable)))
-                    .bind("expr")),
-        Stm, Context);
+    if (!ShouldBeDiagnosed)
+      return false;
 
-    auto Mutations = llvm::SmallVector<const Stmt *, 4>{};
-    for (const auto &RefNodes : Refs) {
-      const auto *const E = RefNodes.getNodeAs<Expr>("expr");
-      if (isMutated(E))
-        Mutations.push_back(E);
-    }
-    return Mutations;
+    ExprMutationAnalyzer Analyzer(
+        *State.DirectiveStack.back()->getStructuredBlock(), Ctx);
+
+    return Analyzer.isMutated(DRef);
   }
+
+  llvm::MapVector<ValueDecl *, AnalysisResult> Results;
 
 private:
-  const Stmt &Stm;
-  ASTContext &Context;
+  SharedVariableState State;
+  ASTContext &Ctx;
+  const llvm::ArrayRef<llvm::StringRef> ThreadSafeTypes;
+  const llvm::ArrayRef<llvm::StringRef> ThreadSafeFunctions;
 };
-
-llvm::SmallVector<const ValueDecl *, 4>
-getIterationVariablesOfDirective(const OMPExecutableDirective *const Directive,
-                                 const size_t NumLoopsToCheckx) {
-  llvm::SmallVector<const DeclRefExpr *, 4> Result{};
-  if (const auto *const LoopDirective =
-          llvm::dyn_cast<OMPLoopDirective>(Directive)) {
-    llvm::SmallVector<const ValueDecl *, 4> Result{};
-    for (const Expr *const E : LoopDirective->counters())
-      if (const auto *const DRef = llvm::dyn_cast_if_present<DeclRefExpr>(E))
-        Result.push_back(DRef->getDecl());
-    return Result;
-  }
-  return {};
-}
-
-std::optional<size_t> getOptCollapseNum(const OMPCollapseClause *const Collapse,
-                                        const ASTContext &Ctx) {
-  if (!Collapse)
-    return std::nullopt;
-  const Expr *const E = Collapse->getNumForLoops();
-  const std::optional<llvm::APSInt> OptInt = E->getIntegerConstantExpr(Ctx);
-  if (OptInt)
-    return OptInt->tryExtValue();
-  return std::nullopt;
-}
 
 const auto DefaultThreadSafeTypes = "std::atomic; std::atomic_ref";
 const auto DefaultThreadSafeFunctions = "";
@@ -189,47 +271,6 @@ void UnprotectedSharedVariableAccessCheck::registerMatchers(
           .bind("directive"),
       this);
 }
-
-void UnprotectedSharedVariableAccessCheck::checkSharedVariable(
-    const ValueDecl *const SharedVar, const Stmt *const Scope, ASTContext &Ctx,
-    const llvm::SmallVector<const ValueDecl *, 4> &LoopVars) {
-  const auto SharedType = SharedVar->getType();
-  if (const auto *const RDecl = SharedType->getAsRecordDecl())
-    if (RDecl->getName().contains("map"))
-      return;
-
-  const auto UnprotectedAcesses = match(
-      findAll(declRefExpr(to(equalsNode(SharedVar)),
-                          unless(hasAncestor(ompProtectedAccessDirective())))
-                  .bind("decl_ref")),
-      *Scope, Ctx);
-
-  if (UnprotectedAcesses.empty()) {
-    return;
-  }
-
-  auto MutationAnalyzer = UnprotectedSharedVariableAccessAnalyzer(*Scope, Ctx);
-
-  const auto Mutations = MutationAnalyzer.findAllMutations(
-      SharedVar, ThreadSafeTypes, ThreadSafeFunctions);
-  if (Mutations.empty()) {
-    return;
-  }
-
-  for (const auto &UnprotectedAcessNodes : UnprotectedAcesses) {
-    const auto *const UnprotectedAccess =
-        UnprotectedAcessNodes.getNodeAs<DeclRefExpr>("decl_ref");
-    diag(UnprotectedAccess->getBeginLoc(),
-         "do not access shared variable %0 of type %1 without synchronization")
-        << UnprotectedAccess->getSourceRange() << SharedVar
-        << SharedVar->getType();
-    for (const Stmt *const Mutation : Mutations)
-      diag(Mutation->getBeginLoc(), "%0 was mutated here",
-           DiagnosticIDs::Level::Note)
-          << Mutation->getSourceRange() << SharedVar;
-  }
-}
-
 void UnprotectedSharedVariableAccessCheck::check(
     const MatchFinder::MatchResult &Result) {
   ASTContext &Ctx = *Result.Context;
@@ -237,38 +278,28 @@ void UnprotectedSharedVariableAccessCheck::check(
   const auto *const Directive =
       Result.Nodes.getNodeAs<OMPExecutableDirective>("directive");
 
-  const Stmt *const StructuredBlock = Directive->getStructuredBlock();
+  Visitor V(Ctx, ThreadSafeTypes, ThreadSafeFunctions);
+  V.TraverseStmt(const_cast<OMPExecutableDirective *>(Directive));
+  for (const auto &[SharedVar, Res] : V.Results) {
+    const auto &[Mutations, UnprotectedAcesses] = Res;
 
-  const auto *const CollapseClause =
-      Directive->getSingleClause<OMPCollapseClause>();
-  const auto NumLoopsToCheck =
-      getOptCollapseNum(CollapseClause, Ctx).value_or(1U);
+    if (Mutations.empty())
+      continue;
 
-  const auto LoopIterVars =
-      getIterationVariablesOfDirective(Directive, NumLoopsToCheck);
-
-  if (Directive->getNumClauses() == 0) {
-    // If no clause is present, sharing is enabled by default, and we need to
-    // check all captured `DeclRefExpr`s.
-    for (const auto *const Child : Directive->children())
-      if (const auto *const Capture = llvm::dyn_cast<CapturedStmt>(Child))
-        for (const auto InnerCapture : Capture->captures())
-          if (InnerCapture.getCaptureKind() == CapturedStmt::VCK_ByRef)
-            checkSharedVariable(InnerCapture.getCapturedVar(), StructuredBlock,
-                                Ctx, LoopIterVars);
-    return;
+    for (const auto &UnprotectedAcessNodes : UnprotectedAcesses) {
+      const auto *const UnprotectedAccess =
+          dyn_cast<DeclRefExpr>(UnprotectedAcessNodes);
+      diag(
+          UnprotectedAccess->getBeginLoc(),
+          "do not access shared variable %0 of type %1 without synchronization")
+          << UnprotectedAccess->getSourceRange() << SharedVar
+          << SharedVar->getType();
+      for (const Stmt *const Mutation : Mutations)
+        diag(Mutation->getBeginLoc(), "%0 was mutated here",
+             DiagnosticIDs::Level::Note)
+            << Mutation->getSourceRange() << SharedVar;
+    }
   }
-
-  const auto SharedDecls = openmp::getSharedVariables(Directive);
-
-  for (const ValueDecl *const SharedDecl : SharedDecls)
-    if (match(valueDecl(hasType(qualType(anyOf(
-                  atomicType(),
-                  hasCanonicalType(hasDeclaration(namedDecl(
-                      matchers::matchesAnyListedName(ThreadSafeTypes)))))))),
-              *SharedDecl, Ctx)
-            .empty())
-      checkSharedVariable(SharedDecl, StructuredBlock, Ctx, LoopIterVars);
 }
 
 void UnprotectedSharedVariableAccessCheck::storeOptions(

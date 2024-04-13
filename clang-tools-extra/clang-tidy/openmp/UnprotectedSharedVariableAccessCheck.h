@@ -35,11 +35,6 @@ public:
   }
 
 private:
-  void
-  checkSharedVariable(const ValueDecl *const SharedVar, const Stmt *const Scope,
-                      ASTContext &Ctx,
-                      const llvm::SmallVector<const ValueDecl *, 4> &LoopVars);
-
   std::vector<StringRef> ThreadSafeTypes;
   std::vector<StringRef> ThreadSafeFunctions;
 };

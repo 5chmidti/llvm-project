@@ -1,4 +1,3 @@
-// RUN: %check_clang_tidy -check-suffix=,NOTMARKED %s openmp-unprotected-shared-variable-access %t -- --extra-arg=-fopenmp
 // RUN: %check_clang_tidy %s openmp-unprotected-shared-variable-access %t -- -config="{CheckOptions: {openmp-unprotected-shared-variable-access.ThreadSafeFunctions: 'threadSafeFunctionByValue;threadSafeFunctionByRef;threadSafeFunctionByConstRef'}}" --extra-arg=-fopenmp
 
 using size_t = unsigned long;
@@ -56,11 +55,13 @@ void var(int* Buffer, int BufferSize) {
         #pragma omp critical
         doesMutate(Sum);
 
-// CHECK-MESSAGES: :[[@LINE-20]]:9: note: 'Sum' was mutated here
-// CHECK-MESSAGES: :[[@LINE-19]]:20: note: 'Sum' was mutated here
-// CHECK-MESSAGES: :[[@LINE-9]]:9: note: 'Sum' was mutated here
-// CHECK-MESSAGES: :[[@LINE-7]]:9: note: 'Sum' was mutated here
-// CHECK-MESSAGES: :[[@LINE-6]]:20: note: 'Sum' was mutated here
+    }
+
+    #pragma omp parallel
+    #pragma omp for
+    for (int LoopVar = 0; LoopVar < BufferSize; ++LoopVar) {
+        #pragma omp atomic update
+            Sum += Buffer[LoopVar];
     }
 
     #pragma omp parallel for
@@ -83,11 +84,6 @@ void var(int* Buffer, int BufferSize) {
         #pragma omp critical
         doesMutate(Sum);
 
-// CHECK-MESSAGES: :[[@LINE-18]]:9: note: 'Sum' was mutated here
-// CHECK-MESSAGES: :[[@LINE-17]]:20: note: 'Sum' was mutated here
-// CHECK-MESSAGES: :[[@LINE-9]]:9: note: 'Sum' was mutated here
-// CHECK-MESSAGES: :[[@LINE-7]]:9: note: 'Sum' was mutated here
-// CHECK-MESSAGES: :[[@LINE-6]]:20: note: 'Sum' was mutated here
     }
 
     #pragma omp parallel for
@@ -110,11 +106,6 @@ void var(int* Buffer, int BufferSize) {
         #pragma omp critical
         doesMutate(Sum);
 
-// CHECK-MESSAGES: :[[@LINE-18]]:9: note: 'Sum' was mutated here
-// CHECK-MESSAGES: :[[@LINE-17]]:20: note: 'Sum' was mutated here
-// CHECK-MESSAGES: :[[@LINE-9]]:9: note: 'Sum' was mutated here
-// CHECK-MESSAGES: :[[@LINE-7]]:9: note: 'Sum' was mutated here
-// CHECK-MESSAGES: :[[@LINE-6]]:20: note: 'Sum' was mutated here
     }
 
     #pragma omp parallel
@@ -161,6 +152,7 @@ void var(int* Buffer, int BufferSize) {
         #pragma omp for
         for (int LoopVar = 0; LoopVar < BufferSize; ++LoopVar) {
             LocalSum += Buffer[LoopVar];
+// CHECK-MESSAGES: :[[@LINE-1]]:13: warning: do not access shared variable 'LocalSum' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
         }
     }
 }

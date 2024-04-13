@@ -50,6 +50,30 @@ AST_POLYMORPHIC_MATCHER_P(
 
 llvm::SmallPtrSet<const clang::ValueDecl *, 4>
 getSharedVariables(const OMPExecutableDirective *Directive);
+
+template <typename ClauseKind>
+llvm::SmallPtrSet<const clang::ValueDecl *, 4>
+getCaptureDeclsOf(const clang::OMPExecutableDirective *const Directive) {
+  llvm::SmallPtrSet<const clang::ValueDecl *, 4> Decls;
+  if (const auto *const Clause =
+          Directive->template getSingleClause<ClauseKind>())
+    for (const auto *const ClauseChild : Clause->children())
+      if (const auto Var = llvm::dyn_cast<clang::DeclRefExpr>(ClauseChild);
+          Var && !Var->refersToEnclosingVariableOrCapture())
+        Decls.insert(Var->getDecl());
+  return Decls;
+}
+
+llvm::SmallPtrSet<const clang::ValueDecl *, 4>
+getPrivatizedVariables(const OMPExecutableDirective *Directive);
+
+struct SharedAndPrivateVariables {
+llvm::SmallPtrSet<const clang::ValueDecl *, 4> Shared;
+llvm::SmallPtrSet<const clang::ValueDecl *, 4> Private;
+};
+SharedAndPrivateVariables
+getSharedAndPrivateVariable(const OMPExecutableDirective *Directive);
+
 } // namespace clang::tidy::openmp
 
 #endif // LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_OPENMP_H
