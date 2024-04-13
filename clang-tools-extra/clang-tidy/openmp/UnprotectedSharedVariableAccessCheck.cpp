@@ -223,7 +223,7 @@ public:
         !match(traverse(
                    TK_IgnoreUnlessSpelledInSource,
                    declRefExpr(
-                       Var,
+                       Var, unless(hasType(ThreadSafeType)),
                        unless(hasParent(expr(anyOf(
                            arraySubscriptExpr(
                                unless(allOf(hasIndex(CollidingIndex),
@@ -259,7 +259,7 @@ private:
   const llvm::ArrayRef<llvm::StringRef> ThreadSafeFunctions;
 };
 
-const auto DefaultThreadSafeTypes = "std::atomic; std::atomic_ref";
+const auto DefaultThreadSafeTypes = "std::atomic.*;std::atomic_ref.*";
 const auto DefaultThreadSafeFunctions = "";
 } // namespace
 
