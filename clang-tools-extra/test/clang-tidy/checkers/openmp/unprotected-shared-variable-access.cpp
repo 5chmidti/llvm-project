@@ -33,6 +33,7 @@ void doesNotMutateC(const _Atomic int&);
 
 void var(int* Buffer, int BufferSize) {
     int Sum = 42;
+    int Sum2 = 42;
     #pragma omp parallel for default(none) shared(Buffer, Sum) firstprivate(BufferSize)
     for (int LoopVar = 0; LoopVar < BufferSize; ++LoopVar) {
         Sum += Buffer[LoopVar];
@@ -132,6 +133,18 @@ void var(int* Buffer, int BufferSize) {
     #pragma omp parallel for default(shared) shared(Buffer) firstprivate(BufferSize) reduction(+ : Sum)
     for (int LoopVar = 0; LoopVar < BufferSize; ++LoopVar) {
         Sum += Buffer[LoopVar];
+    }
+
+    #pragma omp parallel for firstprivate(BufferSize) reduction(+ : Sum) reduction(+ : Sum2)
+    for (int LoopVar = 0; LoopVar < BufferSize; ++LoopVar) {
+        Sum += Buffer[LoopVar];
+        Sum2 += Buffer[LoopVar];
+    }
+
+    #pragma omp parallel for firstprivate(BufferSize) reduction(+ : Sum2) reduction(+ : Sum)
+    for (int LoopVar = 0; LoopVar < BufferSize; ++LoopVar) {
+        Sum += Buffer[LoopVar];
+        Sum2 += Buffer[LoopVar];
     }
 
     #pragma omp parallel default(shared) shared(Buffer) firstprivate(BufferSize)

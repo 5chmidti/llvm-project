@@ -10,27 +10,29 @@
 #include "clang/AST/Decl.h"
 #include "clang/AST/OpenMPClause.h"
 #include "clang/AST/StmtOpenMP.h"
+#include "clang/Basic/OpenMPKinds.h"
+#include "llvm/Support/Casting.h"
 
 template <typename ClauseKind>
 void addCapturedDeclsOf(const clang::OMPExecutableDirective *const Directive,
                         llvm::SmallPtrSet<const clang::ValueDecl *, 4> &Decls) {
-  if (const auto *const Clause =
-          Directive->template getSingleClause<ClauseKind>())
-    for (const auto *const ClauseChild : Clause->children())
-      if (const auto Var = llvm::dyn_cast<clang::DeclRefExpr>(ClauseChild))
-        Decls.insert(Var->getDecl());
+  for (const clang::OMPClause *const Clause : Directive->clauses())
+    if (const auto *const CastClause = llvm::dyn_cast<ClauseKind>(Clause))
+      for (const auto *const ClauseChild : Clause->children())
+        if (const auto Var = llvm::dyn_cast<clang::DeclRefExpr>(ClauseChild))
+          Decls.insert(Var->getDecl());
 }
 
 template <typename ClauseKind>
 void eraseCapturedDeclsOf(
     const clang::OMPExecutableDirective *const Directive,
     llvm::SmallPtrSet<const clang::ValueDecl *, 4> &Decls) {
-  if (const auto *const Clause =
-          Directive->template getSingleClause<ClauseKind>())
-    for (const auto *const ClauseChild : Clause->children())
-      if (const auto Var = llvm::dyn_cast<clang::DeclRefExpr>(ClauseChild);
-          Var && !Var->refersToEnclosingVariableOrCapture())
-        Decls.erase(Var->getDecl());
+  for (const clang::OMPClause *const Clause : Directive->clauses())
+    if (const auto *const CastClause = llvm::dyn_cast<ClauseKind>(Clause))
+      for (const auto *const ClauseChild : Clause->children())
+        if (const auto Var = llvm::dyn_cast<clang::DeclRefExpr>(ClauseChild);
+            Var && !Var->refersToEnclosingVariableOrCapture())
+          Decls.erase(Var->getDecl());
 }
 
 namespace clang::tidy::openmp {
