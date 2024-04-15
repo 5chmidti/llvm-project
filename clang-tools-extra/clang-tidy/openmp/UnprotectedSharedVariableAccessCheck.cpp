@@ -110,12 +110,12 @@ public:
         }
       }
 
-      SharedVarsSTack.push_back(SharedAndPrivateVars.Shared);
+      SharedVarsStack.push_back(SharedAndPrivateVars.Shared);
       PrivatizedVarsStack.push_back(PrivatizedVariables);
-      DependentVarsSTack.push_back(SharedAndPrivateVars.Dependent);
-      CurrentDependentVariables = DependentVarsSTack.back();
-      AllTimeDependentVariables.insert(DependentVarsSTack.back().begin(),
-                                       DependentVarsSTack.back().end());
+      DependentVarsStack.push_back(SharedAndPrivateVars.Dependent);
+      CurrentDependentVariables = DependentVarsStack.back();
+      AllTimeDependentVariables.insert(DependentVarsStack.back().begin(),
+                                       DependentVarsStack.back().end());
       DirectiveStack.push_back(Directive);
     }
 
@@ -123,7 +123,7 @@ public:
       CurrentSharedVariables.append(PrivatizedVarsStack.back());
       PrivatizedVarsStack.pop_back();
       const llvm::SmallPtrSet<const ValueDecl *, 4> &LatestSharedScopeChange =
-          SharedVarsSTack.back();
+          SharedVarsStack.back();
       for (const ValueDecl *const SharedVar : LatestSharedScopeChange) {
         auto *const Iter = llvm::find_if(
             CurrentSharedVariables, [SharedVar](const auto &VarAndCount) {
@@ -135,12 +135,12 @@ public:
             CurrentSharedVariables.erase(Iter);
         }
       }
-      SharedVarsSTack.pop_back();
+      SharedVarsStack.pop_back();
       DirectiveStack.pop_back();
-      DependentVarsSTack.pop_back();
+      DependentVarsStack.pop_back();
 
-      if (!DependentVarsSTack.empty())
-        CurrentDependentVariables = DependentVarsSTack.back();
+      if (!DependentVarsStack.empty())
+        CurrentDependentVariables = DependentVarsStack.back();
       else
         CurrentDependentVariables = {};
     }
@@ -162,11 +162,11 @@ public:
         CurrentSharedVariables;
     llvm::SmallPtrSet<const ValueDecl *, 4> CurrentDependentVariables;
     llvm::SmallPtrSet<const ValueDecl *, 4> AllTimeDependentVariables;
-    llvm::SmallVector<llvm::SmallPtrSet<const ValueDecl *, 4>> SharedVarsSTack;
+    llvm::SmallVector<llvm::SmallPtrSet<const ValueDecl *, 4>> SharedVarsStack;
     llvm::SmallVector<llvm::SmallVector<std::pair<const ValueDecl *, size_t>>>
         PrivatizedVarsStack;
     llvm::SmallVector<llvm::SmallPtrSet<const ValueDecl *, 4>>
-        DependentVarsSTack;
+        DependentVarsStack;
     llvm::SmallVector<const OMPExecutableDirective *> DirectiveStack;
   };
 
