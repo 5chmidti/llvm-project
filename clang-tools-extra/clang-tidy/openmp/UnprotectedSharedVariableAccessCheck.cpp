@@ -114,6 +114,8 @@ public:
       PrivatizedVarsStack.push_back(PrivatizedVariables);
       DependentVarsSTack.push_back(SharedAndPrivateVars.Dependent);
       CurrentDependentVariables = DependentVarsSTack.back();
+      AllTimeDependentVariables.insert(DependentVarsSTack.back().begin(),
+                                       DependentVarsSTack.back().end());
       DirectiveStack.push_back(Directive);
     }
 
@@ -139,11 +141,8 @@ public:
 
       if (!DependentVarsSTack.empty())
         CurrentDependentVariables = DependentVarsSTack.back();
-    }
-
-    bool isSharedOrDependent(const DeclRefExpr *DRef) const {
-      const ValueDecl *Var = DRef->getDecl();
-      return isShared(Var) || isDependent(Var);
+      else
+        CurrentDependentVariables = {};
     }
 
     bool isShared(const ValueDecl *Var) const {
@@ -153,15 +152,16 @@ public:
                            }) != CurrentSharedVariables.end();
     }
 
-    bool isDependent(const ValueDecl *Var) const {
-      return llvm::find(CurrentDependentVariables, Var) !=
-             CurrentDependentVariables.end();
+    bool wasAtSomePointDependent(const ValueDecl *Var) const {
+      return llvm::find(AllTimeDependentVariables, Var) !=
+             AllTimeDependentVariables.end();
     }
 
     // private:
     llvm::SmallVector<std::pair<const ValueDecl *, size_t>>
         CurrentSharedVariables;
     llvm::SmallPtrSet<const ValueDecl *, 4> CurrentDependentVariables;
+    llvm::SmallPtrSet<const ValueDecl *, 4> AllTimeDependentVariables;
     llvm::SmallVector<llvm::SmallPtrSet<const ValueDecl *, 4>> SharedVarsSTack;
     llvm::SmallVector<llvm::SmallVector<std::pair<const ValueDecl *, size_t>>>
         PrivatizedVarsStack;
@@ -178,20 +178,31 @@ public:
       }
       if (const auto *const Taskwait =
               llvm::dyn_cast<OMPTaskwaitDirective>(Directive)) {
-        auto Clauses = Taskwait->clauses();
+        const auto Clauses = Taskwait->clauses();
         if (Clauses.empty()) {
           saveAnalysisAndStartNewEpoch();
           return true;
         }
-        for (const OMPClause *const Clause : Clauses) {
+        for (const OMPClause *const Clause : Clauses)
           if (const auto *const Depend =
-                  llvm::dyn_cast<OMPDependClause>(Clause)) {
-            for (const auto *const VarExpr : Depend->getVarRefs()) {
+                  llvm::dyn_cast<OMPDependClause>(Clause))
+            for (const auto *const VarExpr : Depend->getVarRefs())
               if (const auto *const DRef = llvm::dyn_cast<DeclRefExpr>(VarExpr))
                 saveAnalysisAndStartNewEpoch(DRef->getDecl());
-            }
-          }
+      }
+      if (const auto *const Taskgroup =
+              llvm::dyn_cast<OMPTaskgroupDirective>(Directive)) {
+        const auto Clauses = Taskgroup->clauses();
+        if (Clauses.empty()) {
+          saveAnalysisAndStartNewEpoch();
+          return true;
         }
+        for (const OMPClause *const Clause : Clauses)
+          if (const auto *const Depend =
+                  llvm::dyn_cast<OMPDependClause>(Clause))
+            for (const auto *const VarExpr : Depend->getVarRefs())
+              if (const auto *const DRef = llvm::dyn_cast<DeclRefExpr>(VarExpr))
+                saveAnalysisAndStartNewEpoch(DRef->getDecl());
       }
       return true;
     }
@@ -206,7 +217,8 @@ public:
   bool TraverseCapturedStmt(CapturedStmt *S) { return true; }
 
   bool TraverseDeclRefExpr(DeclRefExpr *DRef) {
-    if (!State.isSharedOrDependent(DRef))
+    const ValueDecl *Var = DRef->getDecl();
+    if (!State.isShared(Var) && !State.wasAtSomePointDependent(Var))
       return true;
 
     // FIXME: can use traversal to know if there is an ancestor
