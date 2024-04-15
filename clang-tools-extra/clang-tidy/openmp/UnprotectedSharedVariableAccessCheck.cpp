@@ -153,8 +153,30 @@ public:
   };
 
   bool TraverseOMPExecutableDirective(OMPExecutableDirective *Directive) {
-    if (Directive->isStandaloneDirective())
+    if (Directive->isStandaloneDirective()) {
+      if (const auto *const Barrier =
+              llvm::dyn_cast<OMPBarrierDirective>(Directive)) {
+        saveAnalysisAndStartNewEpoch();
+      }
+      if (const auto *const Taskwait =
+              llvm::dyn_cast<OMPTaskwaitDirective>(Directive)) {
+        auto Clauses = Taskwait->clauses();
+        if (Clauses.empty()) {
+          saveAnalysisAndStartNewEpoch();
+          return true;
+        }
+        for (const OMPClause *const Clause : Clauses) {
+          if (const auto *const Depend =
+                  llvm::dyn_cast<OMPDependClause>(Clause)) {
+            for (const auto *const VarExpr : Depend->getVarRefs()) {
+              if (const auto *const DRef = llvm::dyn_cast<DeclRefExpr>(VarExpr))
+                saveAnalysisAndStartNewEpoch(DRef->getDecl());
+            }
+          }
+        }
+      }
       return true;
+    }
 
     const openmp::SharedAndPrivateVariables SharedAndPrivateVars =
         openmp::getSharedAndPrivateVariable(Directive);
@@ -179,10 +201,10 @@ public:
             .empty();
 
     if (IsUnprotected)
-      Results[DRef->getDecl()].UnprotectedAcesses.insert(DRef);
+      ContextResults[DRef->getDecl()].UnprotectedAcesses.insert(DRef);
 
     if (isMutating(DRef))
-      Results[DRef->getDecl()].Mutations.insert(DRef);
+      ContextResults[DRef->getDecl()].Mutations.insert(DRef);
 
     return true;
   }
@@ -247,9 +269,34 @@ public:
     return Analyzer.isMutated(DRef);
   }
 
-  llvm::MapVector<ValueDecl *, AnalysisResult> Results;
+  llvm::SmallVector<
+      std::pair<const clang::ValueDecl *, Visitor::AnalysisResult>>
+  takeResults() {
+    Results.append(ContextResults.takeVector());
+    return Results;
+  }
 
 private:
+  void saveAnalysisAndStartNewEpoch() {
+    Results.append(ContextResults.takeVector());
+    ContextResults = llvm::MapVector<const ValueDecl *, AnalysisResult>{};
+  }
+
+  void saveAnalysisAndStartNewEpoch(const ValueDecl *const Val) {
+    auto ResultsForValIter = ContextResults.find(Val);
+    if (ResultsForValIter == ContextResults.end())
+      return;
+    Results.push_back(*ResultsForValIter);
+    ResultsForValIter->second.Mutations.clear();
+    ResultsForValIter->second.UnprotectedAcesses.clear();
+  }
+
+  llvm::MapVector<const ValueDecl *, AnalysisResult> ContextResults;
+
+  llvm::SmallVector<
+      std::pair<const clang::ValueDecl *, Visitor::AnalysisResult>>
+      Results;
+
   SharedVariableState State;
   ASTContext &Ctx;
   const llvm::ArrayRef<llvm::StringRef> ThreadSafeTypes;
@@ -277,7 +324,7 @@ void UnprotectedSharedVariableAccessCheck::check(
 
   Visitor V(Ctx, ThreadSafeTypes, ThreadSafeFunctions);
   V.TraverseStmt(const_cast<OMPExecutableDirective *>(Directive));
-  for (const auto &[SharedVar, Res] : V.Results) {
+  for (const auto &[SharedVar, Res] : V.takeResults()) {
     const auto &[Mutations, UnprotectedAcesses] = Res;
 
     if (Mutations.empty())

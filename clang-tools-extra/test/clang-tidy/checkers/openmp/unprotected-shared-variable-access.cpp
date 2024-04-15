@@ -818,6 +818,7 @@ void threadSafeFunctions(Type value) {
 
 void tasks() {
     int Sum = 0;
+    int Sum2 = 0;
     #pragma omp parallel
     {
         #pragma omp task
@@ -869,5 +870,109 @@ void tasks() {
 
         Sum = 10;
 // CHECK-MESSAGES: :[[@LINE-1]]:9: warning: do not access shared variable 'Sum' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
+    }
+
+    #pragma omp parallel
+    {
+        #pragma omp task depend(out: Sum)
+        Sum = 1;
+
+        #pragma omp taskwait
+
+        Sum = 10;
+// CHECK-MESSAGES: :[[@LINE-1]]:9: warning: do not access shared variable 'Sum' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
+    }
+
+    #pragma omp parallel
+    {
+        #pragma omp task depend(out: Sum)
+        Sum = 1;
+
+        #pragma omp taskwait depend(in: Sum)
+
+        Sum = 10;
+// CHECK-MESSAGES: :[[@LINE-1]]:9: warning: do not access shared variable 'Sum' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
+    }
+
+    #pragma omp parallel
+    {
+        #pragma omp task depend(out: Sum)
+        Sum = 1;
+
+        #pragma omp taskwait depend(in: Sum2)
+
+        Sum = 10;
+// CHECK-MESSAGES: :[[@LINE-1]]:9: warning: do not access shared variable 'Sum' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
+    }
+
+    #pragma omp parallel
+    {
+        #pragma omp task depend(out: Sum)
+        Sum = 1;
+
+        #pragma omp taskwait
+
+        auto Val = Sum;
+    }
+
+    #pragma omp parallel
+    {
+        #pragma omp task depend(out: Sum)
+        Sum = 1;
+
+        #pragma omp taskwait depend(in: Sum)
+
+        auto Val = Sum;
+    }
+
+    #pragma omp parallel
+    {
+        #pragma omp task depend(out: Sum)
+        Sum = 1;
+
+        #pragma omp taskwait depend(in: Sum2)
+
+        auto Val = Sum;
+    }
+}
+
+void barrier() {
+    int Sum = 0;
+    #pragma omp parallel
+    {
+        #pragma omp critical
+        Sum = 1;
+
+        #pragma omp barrier
+
+        auto Val = Sum;
+    }
+
+    #pragma omp parallel
+    {
+        #pragma omp critical
+        Sum = 1;
+
+        #pragma omp barrier
+
+        auto Val = Sum;
+// CHECK-MESSAGES: :[[@LINE-1]]:20: warning: do not access shared variable 'Sum' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
+
+        #pragma omp critical
+        Sum = 1;
+    }
+
+    #pragma omp parallel
+    {
+        #pragma omp critical
+        Sum = 1;
+
+        auto Val = Sum;
+// CHECK-MESSAGES: :[[@LINE-1]]:20: warning: do not access shared variable 'Sum' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
+
+        #pragma omp barrier
+
+        #pragma omp critical
+        Sum = 1;
     }
 }
