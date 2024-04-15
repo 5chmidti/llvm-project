@@ -51,7 +51,8 @@ const ast_matchers::internal::MapAnyOfMatcherImpl<
 
 llvm::SmallPtrSet<const clang::ValueDecl *, 4>
 getSharedVariables(const OMPExecutableDirective *Directive) {
-  if (!isOpenMPParallelDirective(Directive->getDirectiveKind()))
+  if (!isOpenMPParallelDirective(Directive->getDirectiveKind()) &&
+      !isOpenMPTaskingDirective(Directive->getDirectiveKind()))
     return {};
 
   llvm::SmallPtrSet<const ValueDecl *, 4> PossiblySharedDecls{};
@@ -80,6 +81,7 @@ getSharedVariables(const OMPExecutableDirective *Directive) {
   eraseCapturedDeclsOf<OMPReductionClause>(Directive, PossiblySharedDecls);
   eraseCapturedDeclsOf<OMPTaskReductionClause>(Directive, PossiblySharedDecls);
   eraseCapturedDeclsOf<OMPInReductionClause>(Directive, PossiblySharedDecls);
+  eraseCapturedDeclsOf<OMPDependClause>(Directive, PossiblySharedDecls);
 
   return PossiblySharedDecls;
 }
@@ -95,6 +97,7 @@ getPrivatizedVariables(const OMPExecutableDirective *Directive) {
   addCapturedDeclsOf<OMPReductionClause>(Directive, Decls);
   addCapturedDeclsOf<OMPTaskReductionClause>(Directive, Decls);
   addCapturedDeclsOf<OMPInReductionClause>(Directive, Decls);
+  addCapturedDeclsOf<OMPDependClause>(Directive, Decls);
 
   return Decls;
 }

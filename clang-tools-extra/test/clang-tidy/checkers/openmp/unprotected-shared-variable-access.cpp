@@ -817,3 +817,59 @@ void threadSafeFunctions(Type value) {
 // CHECK-MESSAGES-NOTMARKED: :[[@LINE-1]]:42: warning: do not access shared variable 'value' of type 'Type' without synchronization [openmp-unprotected-shared-variable-access]
     }
 }
+
+void tasks() {
+    int Sum = 0;
+    #pragma omp parallel
+    {
+        #pragma omp task
+        Sum = 1;
+// CHECK-MESSAGES: :[[@LINE-1]]:9: warning: do not access shared variable 'Sum' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
+    }
+
+    #pragma omp parallel
+    {
+        #pragma omp task depend(out: Sum)
+        Sum = 1;
+    }
+
+    #pragma omp parallel
+    {
+        #pragma omp task depend(in: Sum)
+        auto Val = Sum;
+
+        #pragma omp task depend(inout: Sum)
+        ++Sum;
+
+        #pragma omp task depend(out: Sum)
+        Sum = 1;
+    }
+
+    #pragma omp parallel
+    {
+        #pragma omp task depend(inout: Sum)
+        ++Sum;
+
+        #pragma omp task
+        Sum = 1;
+// CHECK-MESSAGES: :[[@LINE-1]]:9: warning: do not access shared variable 'Sum' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
+    }
+
+    #pragma omp parallel
+    {
+        #pragma omp task depend(out: Sum)
+        Sum = 1;
+
+        #pragma omp critical
+        Sum = 10;
+    }
+
+    #pragma omp parallel
+    {
+        #pragma omp task depend(out: Sum)
+        Sum = 1;
+
+        Sum = 10;
+// CHECK-MESSAGES: :[[@LINE-1]]:9: warning: do not access shared variable 'Sum' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
+    }
+}
