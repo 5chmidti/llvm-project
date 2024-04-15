@@ -848,6 +848,7 @@ void tasks() {
     {
         #pragma omp task depend(inout: Sum)
         ++Sum;
+// CHECK-MESSAGES: :[[@LINE-1]]:11: warning: do not access shared variable 'Sum' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
 
         #pragma omp task
         Sum = 1;
@@ -867,6 +868,7 @@ void tasks() {
     {
         #pragma omp task depend(out: Sum)
         Sum = 1;
+// CHECK-MESSAGES: :[[@LINE-1]]:9: warning: do not access shared variable 'Sum' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
 
         Sum = 10;
 // CHECK-MESSAGES: :[[@LINE-1]]:9: warning: do not access shared variable 'Sum' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
@@ -898,6 +900,7 @@ void tasks() {
     {
         #pragma omp task depend(out: Sum)
         Sum = 1;
+// CHECK-MESSAGES: :[[@LINE-1]]:9: warning: do not access shared variable 'Sum' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
 
         #pragma omp taskwait depend(in: Sum2)
 
@@ -929,10 +932,26 @@ void tasks() {
     {
         #pragma omp task depend(out: Sum)
         Sum = 1;
+// CHECK-MESSAGES: :[[@LINE-1]]:9: warning: do not access shared variable 'Sum' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
 
         #pragma omp taskwait depend(in: Sum2)
 
         auto Val = Sum;
+// CHECK-MESSAGES: :[[@LINE-1]]:20: warning: do not access shared variable 'Sum' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
+    }
+
+    #pragma omp parallel
+    {
+        #pragma omp task depend(out: Sum)
+        Sum = 1;
+// CHECK-MESSAGES: :[[@LINE-1]]:9: warning: do not access shared variable 'Sum' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
+        #pragma omp task depend(out: Sum2)
+        Sum2 = 1;
+
+        #pragma omp taskwait depend(in: Sum2)
+
+        auto Val = Sum;
+// CHECK-MESSAGES: :[[@LINE-1]]:20: warning: do not access shared variable 'Sum' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
     }
 }
 

@@ -97,6 +97,14 @@ getPrivatizedVariables(const OMPExecutableDirective *Directive) {
   addCapturedDeclsOf<OMPReductionClause>(Directive, Decls);
   addCapturedDeclsOf<OMPTaskReductionClause>(Directive, Decls);
   addCapturedDeclsOf<OMPInReductionClause>(Directive, Decls);
+
+  return Decls;
+}
+
+llvm::SmallPtrSet<const clang::ValueDecl *, 4>
+getDependVariables(const OMPExecutableDirective *Directive) {
+  llvm::SmallPtrSet<const clang::ValueDecl *, 4> Decls;
+
   addCapturedDeclsOf<OMPDependClause>(Directive, Decls);
 
   return Decls;
@@ -104,6 +112,7 @@ getPrivatizedVariables(const OMPExecutableDirective *Directive) {
 
 SharedAndPrivateVariables
 getSharedAndPrivateVariable(const OMPExecutableDirective *Directive) {
-  return {getSharedVariables(Directive), getPrivatizedVariables(Directive)};
+  return {getSharedVariables(Directive), getPrivatizedVariables(Directive),
+          getDependVariables(Directive)};
 }
 } // namespace clang::tidy::openmp

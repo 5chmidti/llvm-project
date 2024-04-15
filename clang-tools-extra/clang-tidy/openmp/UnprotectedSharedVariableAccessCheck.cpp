@@ -69,13 +69,10 @@ public:
         ThreadSafeFunctions(ThreadSafeFunctions) {}
 
   using Base = RecursiveASTVisitor<Visitor>;
-  struct StackValue {
-    const OMPExecutableDirective *Directive;
-    openmp::SharedAndPrivateVariables SharedAndPrivateVars;
-  };
   struct AnalysisResult {
     llvm::SmallPtrSet<const DeclRefExpr *, 4> Mutations;
     llvm::SmallPtrSet<const DeclRefExpr *, 4> UnprotectedAcesses;
+    llvm::SmallPtrSet<const DeclRefExpr *, 4> UnprotectedDependentAcesses;
   };
 
   class SharedVariableState {
@@ -110,6 +107,8 @@ public:
 
       SharedVarsSTack.push_back(SharedAndPrivateVars.Shared);
       PrivatizedVarsStack.push_back(PrivatizedVariables);
+      DependentVarsSTack.push_back(SharedAndPrivateVars.Dependent);
+      CurrentDependentVariables = DependentVarsSTack.back();
       DirectiveStack.push_back(Directive);
     }
 
@@ -131,10 +130,15 @@ public:
       }
       SharedVarsSTack.pop_back();
       DirectiveStack.pop_back();
+      DependentVarsSTack.pop_back();
+
+      if (!DependentVarsSTack.empty())
+        CurrentDependentVariables = DependentVarsSTack.back();
     }
 
-    bool isShared(const DeclRefExpr *DRef) const {
-      return isShared(DRef->getDecl());
+    bool isSharedOrDependent(const DeclRefExpr *DRef) const {
+      const ValueDecl *Var = DRef->getDecl();
+      return isShared(Var) || isDependent(Var);
     }
 
     bool isShared(const ValueDecl *Var) const {
@@ -144,12 +148,20 @@ public:
                            }) != CurrentSharedVariables.end();
     }
 
+    bool isDependent(const ValueDecl *Var) const {
+      return llvm::find(CurrentDependentVariables, Var) !=
+             CurrentDependentVariables.end();
+    }
+
     // private:
     llvm::SmallVector<std::pair<const ValueDecl *, size_t>>
         CurrentSharedVariables;
+    llvm::SmallPtrSet<const ValueDecl *, 4> CurrentDependentVariables;
     llvm::SmallVector<llvm::SmallPtrSet<const ValueDecl *, 4>> SharedVarsSTack;
     llvm::SmallVector<llvm::SmallVector<std::pair<const ValueDecl *, size_t>>>
         PrivatizedVarsStack;
+    llvm::SmallVector<llvm::SmallPtrSet<const ValueDecl *, 4>>
+        DependentVarsSTack;
     llvm::SmallVector<const OMPExecutableDirective *> DirectiveStack;
   };
 
@@ -189,7 +201,7 @@ public:
   bool TraverseCapturedStmt(CapturedStmt *S) { return true; }
 
   bool TraverseDeclRefExpr(DeclRefExpr *DRef) {
-    if (!State.isShared(DRef))
+    if (!State.isSharedOrDependent(DRef))
       return true;
 
     // FIXME: can use traversal to know if there is an ancestor
@@ -198,8 +210,17 @@ public:
               Ctx)
             .empty();
 
-    if (IsUnprotected)
-      ContextResults[DRef->getDecl()].UnprotectedAcesses.insert(DRef);
+    const bool IsDependent =
+        llvm::find(State.CurrentDependentVariables, DRef->getDecl()) !=
+        State.CurrentDependentVariables.end();
+
+    if (IsUnprotected) {
+      if (IsDependent)
+        ContextResults[DRef->getDecl()].UnprotectedDependentAcesses.insert(
+            DRef);
+      else
+        ContextResults[DRef->getDecl()].UnprotectedAcesses.insert(DRef);
+    }
 
     if (isMutating(DRef))
       ContextResults[DRef->getDecl()].Mutations.insert(DRef);
@@ -287,6 +308,7 @@ private:
     Results.push_back(*ResultsForValIter);
     ResultsForValIter->second.Mutations.clear();
     ResultsForValIter->second.UnprotectedAcesses.clear();
+    ResultsForValIter->second.UnprotectedDependentAcesses.clear();
   }
 
   llvm::MapVector<const ValueDecl *, AnalysisResult> ContextResults;
@@ -323,12 +345,33 @@ void UnprotectedSharedVariableAccessCheck::check(
   Visitor V(Ctx, ThreadSafeTypes, ThreadSafeFunctions);
   V.TraverseStmt(const_cast<OMPExecutableDirective *>(Directive));
   for (const auto &[SharedVar, Res] : V.takeResults()) {
-    const auto &[Mutations, UnprotectedAcesses] = Res;
+    const auto &[Mutations, UnprotectedAcesses, UnprotectedDependentAccesses] =
+        Res;
 
     if (Mutations.empty())
       continue;
 
     for (const auto &UnprotectedAcessNodes : UnprotectedAcesses) {
+      const auto *const UnprotectedAccess =
+          dyn_cast<DeclRefExpr>(UnprotectedAcessNodes);
+      diag(
+          UnprotectedAccess->getBeginLoc(),
+          "do not access shared variable %0 of type %1 without synchronization")
+          << UnprotectedAccess->getSourceRange() << SharedVar
+          << SharedVar->getType();
+      for (const Stmt *const Mutation : Mutations)
+        diag(Mutation->getBeginLoc(), "%0 was mutated here",
+             DiagnosticIDs::Level::Note)
+            << Mutation->getSourceRange() << SharedVar;
+    }
+
+    // UnprotectedAcesses should be printed unconditionally, but
+    // UnprotectedDependentAccesses should only be diagnosed if there exists an
+    // unprotected access outside of a dependent region.
+    if (UnprotectedAcesses.empty())
+      continue;
+
+    for (const auto &UnprotectedAcessNodes : UnprotectedDependentAccesses) {
       const auto *const UnprotectedAccess =
           dyn_cast<DeclRefExpr>(UnprotectedAcessNodes);
       diag(

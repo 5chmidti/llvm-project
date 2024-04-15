@@ -67,9 +67,13 @@ getCaptureDeclsOf(const clang::OMPExecutableDirective *const Directive) {
 llvm::SmallPtrSet<const clang::ValueDecl *, 4>
 getPrivatizedVariables(const OMPExecutableDirective *Directive);
 
+llvm::SmallPtrSet<const clang::ValueDecl *, 4>
+getDependVariables(const OMPExecutableDirective *Directive);
+
 struct SharedAndPrivateVariables {
-llvm::SmallPtrSet<const clang::ValueDecl *, 4> Shared;
-llvm::SmallPtrSet<const clang::ValueDecl *, 4> Private;
+  llvm::SmallPtrSet<const clang::ValueDecl *, 4> Shared;
+  llvm::SmallPtrSet<const clang::ValueDecl *, 4> Private;
+  llvm::SmallPtrSet<const clang::ValueDecl *, 4> Dependent;
 };
 SharedAndPrivateVariables
 getSharedAndPrivateVariable(const OMPExecutableDirective *Directive);
