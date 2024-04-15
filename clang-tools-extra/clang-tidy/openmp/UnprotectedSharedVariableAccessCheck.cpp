@@ -80,8 +80,9 @@ public:
 
   class SharedVariableState {
   public:
-    void add(const OMPExecutableDirective *Directive,
-             openmp::SharedAndPrivateVariables SharedAndPrivateVars) {
+    void add(const OMPExecutableDirective *Directive) {
+      const openmp::SharedAndPrivateVariables SharedAndPrivateVars =
+          openmp::getSharedAndPrivateVariable(Directive);
       for (const ValueDecl *SharedVar : SharedAndPrivateVars.Shared) {
         auto *const Iter = llvm::find_if(
             CurrentSharedVariables, [SharedVar](const auto &VarAndCount) {
@@ -178,10 +179,7 @@ public:
       return true;
     }
 
-    const openmp::SharedAndPrivateVariables SharedAndPrivateVars =
-        openmp::getSharedAndPrivateVariable(Directive);
-
-    State.add(Directive, SharedAndPrivateVars);
+    State.add(Directive);
     Stmt *Statement = Directive->getStructuredBlock();
     Base::TraverseStmt(Statement);
     State.pop();
