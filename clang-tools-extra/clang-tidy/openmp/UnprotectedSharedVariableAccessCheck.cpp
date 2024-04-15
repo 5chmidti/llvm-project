@@ -10,6 +10,7 @@
 #include "../utils/Matchers.h"
 #include "../utils/OpenMP.h"
 #include "../utils/OptionsUtils.h"
+#include "clang/Basic/OpenMPKinds.h"
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/ASTTypeTraits.h>
 #include <clang/AST/Decl.h>
@@ -59,6 +60,10 @@ AST_MATCHER(CallExpr, isCallingAtomicBuiltin) {
   default:
     return false;
   }
+}
+
+AST_MATCHER(OMPExecutableDirective, isOMPParallelDirective) {
+  return isOpenMPParallelDirective(Node.getDirectiveKind());
 }
 
 class Visitor : public RecursiveASTVisitor<Visitor> {
@@ -228,6 +233,40 @@ public:
     return true;
   }
 
+  bool TraverseFunctionDecl(FunctionDecl *const) { return true; }
+
+  bool TraverseCallExpr(CallExpr *const CE) {
+    for (Expr *const Arg : CE->arguments())
+      Base::TraverseStmt(Arg);
+    const auto *const FDecl =
+        llvm::dyn_cast_or_null<FunctionDecl>(CE->getCalleeDecl());
+    if (!FDecl)
+      return true;
+    if (llvm::is_contained(CallStack, FDecl))
+      return true;
+    CallStack.push_back(FDecl);
+    if (FDecl->hasBody())
+      TraverseStmt(FDecl->getBody());
+    CallStack.pop_back();
+    return true;
+  }
+
+  bool TraverseCXXOperatorCallExpr(CXXOperatorCallExpr *const CE) {
+    for (Expr *const Arg : CE->arguments())
+      Base::TraverseStmt(Arg);
+    const auto *const FDecl =
+        llvm::dyn_cast_or_null<FunctionDecl>(CE->getCalleeDecl());
+    if (!FDecl)
+      return true;
+    if (llvm::is_contained(CallStack, FDecl))
+      return true;
+    CallStack.push_back(FDecl);
+    if (FDecl->hasBody())
+      TraverseStmt(FDecl->getBody());
+    CallStack.pop_back();
+    return true;
+  }
+
   bool isMutating(const DeclRefExpr *DRef) const {
     if (State.DirectiveStack.empty())
       return false;
@@ -317,6 +356,8 @@ private:
       std::pair<const clang::ValueDecl *, Visitor::AnalysisResult>>
       Results;
 
+  llvm::SmallVector<const Decl *> CallStack;
+
   SharedVariableState State;
   ASTContext &Ctx;
   const llvm::ArrayRef<llvm::StringRef> ThreadSafeTypes;
@@ -330,7 +371,8 @@ const auto DefaultThreadSafeFunctions = "";
 void UnprotectedSharedVariableAccessCheck::registerMatchers(
     MatchFinder *Finder) {
   Finder->addMatcher(
-      ompExecutableDirective(unless(isStandaloneDirective()),
+      ompExecutableDirective(isOMPParallelDirective(),
+                             unless(isStandaloneDirective()),
                              unless(hasAncestor(ompExecutableDirective())))
           .bind("directive"),
       this);
