@@ -46,8 +46,6 @@ void var(int* Buffer, int BufferSize) {
         const int SavedSum = Sum;
 // CHECK-MESSAGES: :[[@LINE-1]]:30: warning: do not access shared variable 'Sum' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
 
-        #pragma barrier
-
         #pragma omp atomic
         Sum += Buffer[LoopVar];
 
