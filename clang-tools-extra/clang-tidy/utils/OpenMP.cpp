@@ -51,6 +51,9 @@ const ast_matchers::internal::MapAnyOfMatcherImpl<
 
 llvm::SmallPtrSet<const clang::ValueDecl *, 4>
 getSharedVariables(const OMPExecutableDirective *Directive) {
+  if (!isOpenMPParallelDirective(Directive->getDirectiveKind()))
+    return {};
+
   llvm::SmallPtrSet<const ValueDecl *, 4> PossiblySharedDecls{};
 
   // The OMPDefaultClause does not provide a way to know which decls get
