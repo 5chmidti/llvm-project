@@ -165,6 +165,42 @@ void var(int* Buffer, int BufferSize) {
             LocalSum += Buffer[LoopVar];
         }
     }
+
+    #pragma omp parallel
+    {
+        #pragma omp critical
+        Sum = 10;
+
+        #pragma omp barrier
+
+        #pragma omp for reduction(+ : Sum)
+            for (int LoopVar = 0; LoopVar < BufferSize; ++LoopVar) {
+                Sum += Buffer[LoopVar];
+            }
+    }
+
+    #pragma omp parallel
+    {
+        #pragma omp critical
+        Sum = 10;
+
+        #pragma omp for reduction(+ : Sum)
+            for (int LoopVar = 0; LoopVar < BufferSize; ++LoopVar) {
+                Sum += Buffer[LoopVar];
+            }
+    }
+
+    #pragma omp parallel
+    {
+        #pragma omp master
+        Sum = 10;
+// CHECK-MESSAGES: :[[@LINE-1]]:9: warning: do not access shared variable 'Sum' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
+
+        #pragma omp for reduction(+ : Sum)
+            for (int LoopVar = 0; LoopVar < BufferSize; ++LoopVar) {
+                Sum += Buffer[LoopVar];
+            }
+    }
 }
 
 void varAtomic(int* Buffer, int BufferSize) {

@@ -185,6 +185,10 @@ public:
       return true;
     }
 
+    markCapturesAsMutations<OMPReductionClause>(Directive);
+    markCapturesAsMutations<OMPTaskReductionClause>(Directive);
+    markCapturesAsMutations<OMPInReductionClause>(Directive);
+
     State.add(Directive);
     Stmt *Statement = Directive->getStructuredBlock();
     Base::TraverseStmt(Statement);
@@ -317,6 +321,14 @@ public:
         *State.DirectiveStack.back()->getStructuredBlock(), Ctx);
 
     return Analyzer.isMutated(DRef);
+  }
+
+  template <typename Clause>
+  void markCapturesAsMutations(const OMPExecutableDirective *const Directive) {
+    for (const ValueDecl *const Val : getCaptureDeclsOf<Clause>(Directive))
+      ContextResults[Val].Mutations.insert(AnalysisResult::Result{
+          Directive, State.AncestorContext, State.isDependent(Val),
+          State.wasAtSomePointDependent(Val)});
   }
 
   template <typename DirectiveType>
