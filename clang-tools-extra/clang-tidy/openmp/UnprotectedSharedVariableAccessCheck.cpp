@@ -464,7 +464,16 @@ void UnprotectedSharedVariableAccessCheck::check(
     if (Mutations.empty())
       continue;
 
+    const bool AllMutationsAreInMaster =
+        llvm::all_of(Mutations, [](const Visitor::AnalysisResult::Result &Res) {
+          return Res.isInContextOf(OpenMPDirectiveKind::OMPD_master);
+        });
+
     for (const auto &UnprotectedAccess : UnprotectedAcesses) {
+      if (AllMutationsAreInMaster &&
+          UnprotectedAccess.isInContextOf(OpenMPDirectiveKind::OMPD_master))
+        continue;
+
       diag(UnprotectedAccess.S->getBeginLoc(),
            "do not access shared variable %0 of type %1 without "
            "synchronization%select{|; specify synchronization on the task with "

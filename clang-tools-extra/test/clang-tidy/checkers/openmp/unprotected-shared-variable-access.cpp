@@ -201,6 +201,47 @@ void var(int* Buffer, int BufferSize) {
                 Sum += Buffer[LoopVar];
             }
     }
+
+    #pragma omp parallel
+    #pragma omp master
+    Sum = 10;
+
+    #pragma omp parallel
+    {
+        #pragma omp master
+        Sum = 10;
+
+        #pragma omp master
+        Sum = 10;
+    }
+
+    #pragma omp parallel
+    {
+        #pragma omp master
+        Sum = 10;
+// CHECK-MESSAGES: :[[@LINE-1]]:9: warning: do not access shared variable 'Sum' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
+
+        #pragma omp master
+        Sum = 10;
+// CHECK-MESSAGES: :[[@LINE-1]]:9: warning: do not access shared variable 'Sum' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
+
+        Sum = 10;
+// CHECK-MESSAGES: :[[@LINE-1]]:9: warning: do not access shared variable 'Sum' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
+    }
+
+    #pragma omp parallel
+    {
+        #pragma omp master
+        Sum = 10;
+// CHECK-MESSAGES: :[[@LINE-1]]:9: warning: do not access shared variable 'Sum' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
+
+        #pragma omp master
+        Sum = 10;
+// CHECK-MESSAGES: :[[@LINE-1]]:9: warning: do not access shared variable 'Sum' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
+
+        #pragma omp critical
+        Sum = 10;
+    }
 }
 
 void varAtomic(int* Buffer, int BufferSize) {
