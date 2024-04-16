@@ -81,6 +81,23 @@ bool isOpenMPDirectiveKind(const OpenMPDirectiveKind DKind,
          llvm::is_contained(getLeafConstructs(DKind), Expected);
 }
 
+bool isUndeferredTask(const OMPExecutableDirective *const Directive,
+                      const ASTContext &Ctx) {
+  const auto *const Task = llvm::dyn_cast<OMPTaskDirective>(Directive);
+  if (!Task)
+    return false;
+
+  for (const auto *const Clause : Task->clauses()) {
+    const auto *const If = llvm::dyn_cast<OMPIfClause>(Clause);
+    if (!If)
+      continue;
+    bool Result = false;
+    if (If->getCondition()->EvaluateAsBooleanCondition(Result, Ctx) && !Result)
+      return true;
+  }
+  return false;
+}
+
 class Visitor : public RecursiveASTVisitor<Visitor> {
 public:
   Visitor(ASTContext &Ctx, llvm::ArrayRef<llvm::StringRef> ThreadSafeTypes,
@@ -219,8 +236,8 @@ public:
       if (const auto *const Barrier =
               llvm::dyn_cast<OMPBarrierDirective>(Directive))
         saveAnalysisAndStartNewEpoch();
-
-      startNewEpochIfEncountered<OMPTaskwaitDirective>(Directive);
+      else
+        startNewEpochIfEncountered<OMPTaskwaitDirective>(Directive);
 
       return true;
     }
@@ -234,7 +251,11 @@ public:
     Base::TraverseStmt(Statement);
     State.pop();
 
-    startNewEpochIfEncountered<OMPTaskgroupDirective>(Directive);
+    if (isUndeferredTask(Directive, Ctx))
+      startNewEpochIfEncountered<OMPTaskDirective>(Directive);
+    else
+      startNewEpochIfEncountered<OMPTaskgroupDirective>(Directive);
+
     return true;
   }
 
@@ -381,9 +402,9 @@ public:
   template <typename DirectiveType>
   void
   startNewEpochIfEncountered(const OMPExecutableDirective *const Directive) {
-    if (const auto *const Taskgroup =
+    if (const auto *const CastDirective =
             llvm::dyn_cast<DirectiveType>(Directive)) {
-      const auto Clauses = Taskgroup->clauses();
+      const auto Clauses = CastDirective->clauses();
       if (Clauses.empty()) {
         saveAnalysisAndStartNewEpoch();
         return;

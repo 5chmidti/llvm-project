@@ -1058,6 +1058,21 @@ void tasks() {
 
         auto Val2 = Sum;
     }
+
+    #pragma omp parallel
+    {
+        #pragma omp task depend(out: Sum)
+        Sum = 1;
+        #pragma omp task depend(out: Sum2)
+        Sum2 = 1;
+
+        #pragma omp task depend(in: Sum) if(0)
+        ;
+
+        auto Val1 = Sum;
+        auto Val2 = Sum2;
+// CHECK-MESSAGES: :[[@LINE-1]]:21: warning: do not access shared variable 'Sum2' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
+    }
 }
 
 void barrier() {
