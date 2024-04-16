@@ -177,37 +177,11 @@ public:
   bool TraverseOMPExecutableDirective(OMPExecutableDirective *Directive) {
     if (Directive->isStandaloneDirective()) {
       if (const auto *const Barrier =
-              llvm::dyn_cast<OMPBarrierDirective>(Directive)) {
+              llvm::dyn_cast<OMPBarrierDirective>(Directive))
         saveAnalysisAndStartNewEpoch();
-      }
-      if (const auto *const Taskwait =
-              llvm::dyn_cast<OMPTaskwaitDirective>(Directive)) {
-        const auto Clauses = Taskwait->clauses();
-        if (Clauses.empty()) {
-          saveAnalysisAndStartNewEpoch();
-          return true;
-        }
-        for (const OMPClause *const Clause : Clauses)
-          if (const auto *const Depend =
-                  llvm::dyn_cast<OMPDependClause>(Clause))
-            for (const auto *const VarExpr : Depend->getVarRefs())
-              if (const auto *const DRef = llvm::dyn_cast<DeclRefExpr>(VarExpr))
-                saveAnalysisAndStartNewEpoch(DRef->getDecl());
-      }
-      if (const auto *const Taskgroup =
-              llvm::dyn_cast<OMPTaskgroupDirective>(Directive)) {
-        const auto Clauses = Taskgroup->clauses();
-        if (Clauses.empty()) {
-          saveAnalysisAndStartNewEpoch();
-          return true;
-        }
-        for (const OMPClause *const Clause : Clauses)
-          if (const auto *const Depend =
-                  llvm::dyn_cast<OMPDependClause>(Clause))
-            for (const auto *const VarExpr : Depend->getVarRefs())
-              if (const auto *const DRef = llvm::dyn_cast<DeclRefExpr>(VarExpr))
-                saveAnalysisAndStartNewEpoch(DRef->getDecl());
-      }
+
+      startNewEpochIfEncountered<OMPTaskwaitDirective>(Directive);
+
       return true;
     }
 
@@ -215,6 +189,8 @@ public:
     Stmt *Statement = Directive->getStructuredBlock();
     Base::TraverseStmt(Statement);
     State.pop();
+
+    startNewEpochIfEncountered<OMPTaskgroupDirective>(Directive);
     return true;
   }
 
@@ -341,6 +317,24 @@ public:
         *State.DirectiveStack.back()->getStructuredBlock(), Ctx);
 
     return Analyzer.isMutated(DRef);
+  }
+
+  template <typename DirectiveType>
+  void
+  startNewEpochIfEncountered(const OMPExecutableDirective *const Directive) {
+    if (const auto *const Taskgroup =
+            llvm::dyn_cast<DirectiveType>(Directive)) {
+      const auto Clauses = Taskgroup->clauses();
+      if (Clauses.empty()) {
+        saveAnalysisAndStartNewEpoch();
+        return;
+      }
+      for (const OMPClause *const Clause : Clauses)
+        if (const auto *const Depend = llvm::dyn_cast<OMPDependClause>(Clause))
+          for (const auto *const VarExpr : Depend->getVarRefs())
+            if (const auto *const DRef = llvm::dyn_cast<DeclRefExpr>(VarExpr))
+              saveAnalysisAndStartNewEpoch(DRef->getDecl());
+    }
   }
 
   llvm::SmallVector<
