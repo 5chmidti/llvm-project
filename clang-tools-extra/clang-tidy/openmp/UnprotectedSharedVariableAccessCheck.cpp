@@ -66,6 +66,10 @@ AST_MATCHER(OMPExecutableDirective, isOMPParallelDirective) {
   return isOpenMPParallelDirective(Node.getDirectiveKind());
 }
 
+AST_MATCHER(OMPExecutableDirective, isOMPTargetDirective) {
+  return isOpenMPTargetExecutionDirective(Node.getDirectiveKind());
+}
+
 class Visitor : public RecursiveASTVisitor<Visitor> {
 public:
   Visitor(ASTContext &Ctx, llvm::ArrayRef<llvm::StringRef> ThreadSafeTypes,
@@ -383,12 +387,14 @@ const auto DefaultThreadSafeFunctions = "";
 void UnprotectedSharedVariableAccessCheck::registerMatchers(
     MatchFinder *Finder) {
   Finder->addMatcher(
-      ompExecutableDirective(isOMPParallelDirective(),
-                             unless(isStandaloneDirective()),
-                             unless(hasAncestor(ompExecutableDirective())))
+      ompExecutableDirective(
+          anyOf(isOMPParallelDirective(), isOMPTargetDirective()),
+          unless(isStandaloneDirective()),
+          unless(hasAncestor(ompExecutableDirective())))
           .bind("directive"),
       this);
 }
+
 void UnprotectedSharedVariableAccessCheck::check(
     const MatchFinder::MatchResult &Result) {
   ASTContext &Ctx = *Result.Context;
