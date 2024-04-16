@@ -11,6 +11,7 @@
 #include "../utils/OpenMP.h"
 #include "../utils/OptionsUtils.h"
 #include "clang/Basic/OpenMPKinds.h"
+#include "llvm/ADT/SmallSet.h"
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/ASTTypeTraits.h>
 #include <clang/AST/Decl.h>
@@ -48,6 +49,10 @@ const ast_matchers::internal::MapAnyOfMatcher<
     OMPCriticalDirective, OMPAtomicDirective, OMPOrderedDirective,
     OMPSingleDirective>
     ompProtectedAccessDirective;
+
+const ast_matchers::internal::VariadicDynCastAllOfMatcher<Stmt,
+                                                          OMPTaskDirective>
+    ompTaskDirective;
 // NOLINTEND(readability-identifier-naming)
 
 AST_MATCHER(CallExpr, isCallingAtomicBuiltin) {
@@ -70,6 +75,12 @@ AST_MATCHER(OMPExecutableDirective, isOMPTargetDirective) {
   return isOpenMPTargetExecutionDirective(Node.getDirectiveKind());
 }
 
+bool isOpenMPDirectiveKind(const OpenMPDirectiveKind DKind,
+                           const OpenMPDirectiveKind Expected) {
+  return DKind == Expected ||
+         llvm::is_contained(getLeafConstructs(DKind), Expected);
+}
+
 class Visitor : public RecursiveASTVisitor<Visitor> {
 public:
   Visitor(ASTContext &Ctx, llvm::ArrayRef<llvm::StringRef> ThreadSafeTypes,
@@ -79,9 +90,31 @@ public:
 
   using Base = RecursiveASTVisitor<Visitor>;
   struct AnalysisResult {
-    llvm::SmallPtrSet<const DeclRefExpr *, 4> Mutations;
-    llvm::SmallPtrSet<const DeclRefExpr *, 4> UnprotectedAcesses;
-    llvm::SmallPtrSet<const DeclRefExpr *, 4> UnprotectedDependentAcesses;
+    struct Result {
+      const Stmt *S;
+      llvm::SmallVector<OpenMPDirectiveKind, 8> AncestorContext;
+      bool IsDependent = false;
+      bool WasEverDependent = false;
+
+      template <typename... OMPDirectiveKinds>
+      bool isInContextOf(const OMPDirectiveKinds... Expected) const {
+        return llvm::any_of(
+            AncestorContext, [Expected...](const OpenMPDirectiveKind Kind) {
+              return (isOpenMPDirectiveKind(Kind, Expected) || ...);
+            });
+      }
+
+      friend bool operator<(const Result &Lhs, const Result &Rhs) {
+        return Lhs.S < Rhs.S;
+      }
+      friend bool operator==(const Result &Lhs, const Result &Rhs) {
+        return Lhs.S == Rhs.S;
+      }
+    };
+
+    llvm::SmallSet<Result, 4> Mutations;
+    llvm::SmallSet<Result, 4> UnprotectedAcesses;
+    llvm::SmallSet<Result, 4> UnprotectedDependentAcesses;
   };
 
   class SharedVariableState {
@@ -121,6 +154,7 @@ public:
       AllTimeDependentVariables.insert(DependentVarsStack.back().begin(),
                                        DependentVarsStack.back().end());
       DirectiveStack.push_back(Directive);
+      AncestorContext.push_back(Directive->getDirectiveKind());
     }
 
     void pop() {
@@ -141,6 +175,7 @@ public:
       }
       SharedVarsStack.pop_back();
       DirectiveStack.pop_back();
+      AncestorContext.pop_back();
       DependentVarsStack.pop_back();
 
       if (!DependentVarsStack.empty())
@@ -154,6 +189,10 @@ public:
                            [Var](const auto &SharedVarWithCount) {
                              return SharedVarWithCount.first == Var;
                            }) != CurrentSharedVariables.end();
+    }
+
+    bool isDependent(const ValueDecl *Var) const {
+      return llvm::is_contained(CurrentDependentVariables, Var);
     }
 
     bool wasAtSomePointDependent(const ValueDecl *Var) const {
@@ -172,6 +211,7 @@ public:
     llvm::SmallVector<llvm::SmallPtrSet<const ValueDecl *, 4>>
         DependentVarsStack;
     llvm::SmallVector<const OMPExecutableDirective *> DirectiveStack;
+    llvm::SmallVector<OpenMPDirectiveKind, 8> AncestorContext;
   };
 
   bool TraverseOMPExecutableDirective(OMPExecutableDirective *Directive) {
@@ -202,29 +242,36 @@ public:
 
   bool TraverseDeclRefExpr(DeclRefExpr *DRef) {
     const ValueDecl *Var = DRef->getDecl();
-    if (!State.isShared(Var) && !State.wasAtSomePointDependent(Var))
+    const bool IsShared = State.isShared(Var);
+    const bool WasAtSomePointDependent = State.wasAtSomePointDependent(Var);
+    if (!IsShared && !WasAtSomePointDependent)
       return true;
 
     // FIXME: can use traversal to know if there is an ancestor
-    const bool IsUnprotected =
-        match(declRefExpr(hasAncestor(ompProtectedAccessDirective())), *DRef,
-              Ctx)
-            .empty();
+    const auto MatchResult =
+        match(declRefExpr(hasAncestor(ompExecutableDirective(
+                  anyOf(ompProtectedAccessDirective().bind("protected"),
+                        ompTaskDirective())))),
+              *DRef, Ctx);
+    const bool IsProtected =
+        !MatchResult.empty() &&
+        MatchResult[0].getNodeAs<OMPExecutableDirective>("protected");
 
-    const bool IsDependent =
-        llvm::find(State.CurrentDependentVariables, DRef->getDecl()) !=
-        State.CurrentDependentVariables.end();
+    const bool IsDependent = State.isDependent(Var);
 
-    if (IsUnprotected) {
+    if (!IsProtected) {
       if (IsDependent)
-        ContextResults[DRef->getDecl()].UnprotectedDependentAcesses.insert(
-            DRef);
+        ContextResults[Var].UnprotectedDependentAcesses.insert(
+            AnalysisResult::Result{DRef, State.AncestorContext, IsDependent,
+                                   WasAtSomePointDependent});
       else
-        ContextResults[DRef->getDecl()].UnprotectedAcesses.insert(DRef);
+        ContextResults[Var].UnprotectedAcesses.insert(AnalysisResult::Result{
+            DRef, State.AncestorContext, IsDependent, WasAtSomePointDependent});
     }
 
     if (isMutating(DRef))
-      ContextResults[DRef->getDecl()].Mutations.insert(DRef);
+      ContextResults[Var].Mutations.insert(AnalysisResult::Result{
+          DRef, State.AncestorContext, IsDependent, WasAtSomePointDependent});
 
     return true;
   }
@@ -350,7 +397,7 @@ public:
   }
 
   llvm::SmallVector<
-      std::pair<const clang::ValueDecl *, Visitor::AnalysisResult>>
+      std::pair<const clang::ValueDecl *, Visitor::AnalysisResult>, 4>
   takeResults() {
     Results.append(ContextResults.takeVector());
     return Results;
@@ -375,7 +422,7 @@ private:
   llvm::MapVector<const ValueDecl *, AnalysisResult> ContextResults;
 
   llvm::SmallVector<
-      std::pair<const clang::ValueDecl *, Visitor::AnalysisResult>>
+      std::pair<const clang::ValueDecl *, Visitor::AnalysisResult>, 4>
       Results;
 
   llvm::SmallVector<const Decl *> CallStack;
@@ -417,35 +464,48 @@ void UnprotectedSharedVariableAccessCheck::check(
     if (Mutations.empty())
       continue;
 
-    for (const auto &UnprotectedAcessNodes : UnprotectedAcesses) {
-      const auto *const UnprotectedAccess =
-          dyn_cast<DeclRefExpr>(UnprotectedAcessNodes);
-      diag(
-          UnprotectedAccess->getBeginLoc(),
-          "do not access shared variable %0 of type %1 without synchronization")
-          << UnprotectedAccess->getSourceRange() << SharedVar
-          << SharedVar->getType();
-      for (const Stmt *const Mutation : Mutations)
+    for (const auto &UnprotectedAccess : UnprotectedAcesses) {
+      diag(UnprotectedAccess.S->getBeginLoc(),
+           "do not access shared variable %0 of type %1 without "
+           "synchronization%select{|; specify synchronization on the task with "
+           "`depend`}2")
+          << UnprotectedAccess.S->getSourceRange() << SharedVar
+          << SharedVar->getType()
+          << UnprotectedAccess.isInContextOf(OpenMPDirectiveKind::OMPD_task);
+      for (const auto &[Mutation, MutationContext, MutationIsDependent,
+                        MutationWasEverDependent] : Mutations)
         diag(Mutation->getBeginLoc(), "%0 was mutated here",
              DiagnosticIDs::Level::Note)
             << Mutation->getSourceRange() << SharedVar;
     }
 
-    // UnprotectedAcesses should be printed unconditionally, but
-    // UnprotectedDependentAccesses should only be diagnosed if there exists an
-    // unprotected access outside of a dependent region.
-    if (UnprotectedAcesses.empty())
+    const bool AllMutationsAreDependent =
+        llvm::all_of(Mutations, [](const Visitor::AnalysisResult::Result &R) {
+          return R.IsDependent;
+        });
+
+    const bool AllMutationsAreInTasks =
+        llvm::all_of(Mutations, [](const Visitor::AnalysisResult::Result &R) {
+          return R.isInContextOf(OpenMPDirectiveKind::OMPD_task);
+        });
+
+    if (!UnprotectedAcesses.empty() || AllMutationsAreInTasks)
       continue;
 
-    for (const auto &UnprotectedAcessNodes : UnprotectedDependentAccesses) {
-      const auto *const UnprotectedAccess =
-          dyn_cast<DeclRefExpr>(UnprotectedAcessNodes);
-      diag(
-          UnprotectedAccess->getBeginLoc(),
-          "do not access shared variable %0 of type %1 without synchronization")
-          << UnprotectedAccess->getSourceRange() << SharedVar
+    for (const auto &UnprotectedAccess : UnprotectedDependentAccesses) {
+      const bool IsInSingleOrSections = UnprotectedAccess.isInContextOf(
+          OpenMPDirectiveKind::OMPD_sections, OpenMPDirectiveKind::OMPD_single);
+
+      if (UnprotectedAcesses.empty() &&
+          (IsInSingleOrSections || AllMutationsAreDependent))
+        continue;
+      diag(UnprotectedAccess.S->getBeginLoc(),
+           "do not access shared variable %0 of type %1 without "
+           "synchronization")
+          << UnprotectedAccess.S->getSourceRange() << SharedVar
           << SharedVar->getType();
-      for (const Stmt *const Mutation : Mutations)
+      for (const auto &[Mutation, MutationContext, MutationIsDependent,
+                        MutationWasEverDependent] : Mutations)
         diag(Mutation->getBeginLoc(), "%0 was mutated here",
              DiagnosticIDs::Level::Note)
             << Mutation->getSourceRange() << SharedVar;
