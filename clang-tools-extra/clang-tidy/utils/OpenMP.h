@@ -55,12 +55,12 @@ template <typename ClauseKind>
 llvm::SmallPtrSet<const clang::ValueDecl *, 4>
 getCaptureDeclsOf(const clang::OMPExecutableDirective *const Directive) {
   llvm::SmallPtrSet<const clang::ValueDecl *, 4> Decls;
-  if (const auto *const Clause =
-          Directive->template getSingleClause<ClauseKind>())
-    for (const auto *const ClauseChild : Clause->children())
-      if (const auto Var = llvm::dyn_cast<clang::DeclRefExpr>(ClauseChild);
-          Var && !Var->refersToEnclosingVariableOrCapture())
-        Decls.insert(Var->getDecl());
+  for (const clang::OMPClause *const Clause : Directive->clauses())
+    if (const auto *const CastClause = llvm::dyn_cast<ClauseKind>(Clause))
+      for (const auto *const ClauseChild : Clause->children())
+        if (const auto Var = llvm::dyn_cast<clang::DeclRefExpr>(ClauseChild);
+            Var)
+          Decls.insert(Var->getDecl());
   return Decls;
 }
 
