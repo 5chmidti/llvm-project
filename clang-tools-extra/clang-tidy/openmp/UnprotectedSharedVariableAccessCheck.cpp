@@ -319,12 +319,19 @@ public:
         State.DependentVars.wasAtSomePointDependent(Var);
     const bool WasAtSomePointShared =
         State.SharedAndPrivateVars.wasAtSomePointShared(Var);
-    if ((!IsShared && !WasAtSomePointDependent && !WasAtSomePointShared) ||
+    const auto *const Variable = llvm::dyn_cast<VarDecl>(Var);
+    const bool Global = Variable && Variable->hasGlobalStorage();
+    if ((!IsShared && !WasAtSomePointDependent && !WasAtSomePointShared &&
+         !Global) ||
         (WasAtSomePointDependent && !WasAtSomePointShared))
       return true;
 
     const bool IsReductionVariable = State.Reductions.isReductionVar(Var);
-    bool IsProtected = IsReductionVariable;
+    const bool IsThreadLocal = Variable && Variable->getStorageDuration() ==
+                                               StorageDuration::SD_Thread;
+    bool IsProtected = IsReductionVariable ||
+                       Var->hasAttr<OMPThreadPrivateDeclAttr>() ||
+                       IsThreadLocal;
     if (!IsProtected) {
       // FIXME: can use traversal to know if there is an ancestor
       const auto MatchResult =

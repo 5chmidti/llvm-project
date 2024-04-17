@@ -31,6 +31,18 @@ void doesNotMutate(const int&);
 void doesNotMutate(const std::atomic<int>&);
 void doesNotMutateC(const _Atomic int&);
 
+int Global = 0;
+
+struct StaticStorage {
+    static int StaticMember;
+    static int StaticThreadPrivate;
+    #pragma omp threadprivate(StaticThreadPrivate)
+    thread_local static int StaticThreadLocal;
+};
+int StaticStorage::StaticMember = 0;
+int StaticStorage::StaticThreadPrivate = 0;
+thread_local int StaticStorage::StaticThreadLocal = 0;
+
 void var(int* Buffer, int BufferSize) {
     int Sum = 42;
     int Sum2 = 42;
@@ -250,6 +262,28 @@ void var(int* Buffer, int BufferSize) {
 
         auto Val = Sum;
 // CHECK-MESSAGES: :[[@LINE-1]]:20: warning: do not access shared variable 'Sum' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
+    }
+
+    #pragma omp parallel
+    {
+        Global = 0;
+// CHECK-MESSAGES: :[[@LINE-1]]:9: warning: do not access shared variable 'Global' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
+    }
+
+    #pragma omp parallel
+    {
+        StaticStorage::StaticMember = 0;
+// CHECK-MESSAGES: :[[@LINE-1]]:9: warning: do not access shared variable 'StaticMember' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
+    }
+
+    #pragma omp parallel
+    {
+        StaticStorage::StaticThreadPrivate = 0;
+    }
+
+    #pragma omp parallel
+    {
+        StaticStorage::StaticThreadLocal = 0;
     }
 }
 
