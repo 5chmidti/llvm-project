@@ -99,9 +99,23 @@ private:
   llvm::SmallVector<llvm::SmallPtrSet<const ValueDecl *, 4>> DependentVarsStack;
 };
 
-class VariableState {
+class DirectiveState {
 public:
   void add(const OMPExecutableDirective *Directive) {
+    DirectiveStack.push_back(Directive);
+    AncestorContext.push_back(Directive->getDirectiveKind());
+  }
+  void pop() {
+    DirectiveStack.pop_back();
+    AncestorContext.pop_back();
+  }
+  llvm::SmallVector<const OMPExecutableDirective *> DirectiveStack;
+  llvm::SmallVector<OpenMPDirectiveKind, 8> AncestorContext;
+};
+
+class SharedAndPrivateState {
+public:
+  void add(const OMPExecutableDirective *const Directive) {
     const auto Shared = getSharedVariables(Directive);
     for (const ValueDecl *SharedVar : Shared) {
       auto *const Iter = llvm::find_if(CurrentSharedVars,
@@ -132,9 +146,6 @@ public:
 
     SharedVarsStack.push_back(Shared);
     PrivatizedVarsStack.push_back(PrivatizedVariables);
-    DirectiveStack.push_back(Directive);
-    AncestorContext.push_back(Directive->getDirectiveKind());
-    DependentVars.add(Directive);
   }
 
   void pop() {
@@ -154,9 +165,6 @@ public:
       }
     }
     SharedVarsStack.pop_back();
-    DirectiveStack.pop_back();
-    AncestorContext.pop_back();
-    DependentVars.pop();
   }
 
   bool isShared(const ValueDecl *Var) const {
@@ -170,15 +178,30 @@ public:
     return llvm::find(AllTimeSharedVars, Var) != AllTimeSharedVars.end();
   }
 
-  DependentVariableState DependentVars;
-  // private:
   llvm::SmallVector<std::pair<const ValueDecl *, size_t>> CurrentSharedVars;
   llvm::SmallPtrSet<const ValueDecl *, 4> AllTimeSharedVars;
   llvm::SmallVector<llvm::SmallPtrSet<const ValueDecl *, 4>> SharedVarsStack;
   llvm::SmallVector<llvm::SmallVector<std::pair<const ValueDecl *, size_t>>>
       PrivatizedVarsStack;
-  llvm::SmallVector<const OMPExecutableDirective *> DirectiveStack;
-  llvm::SmallVector<OpenMPDirectiveKind, 8> AncestorContext;
+};
+
+class VariableState {
+public:
+  void add(const OMPExecutableDirective *Directive) {
+    SharedAndPrivateVars.add(Directive);
+    Directives.add(Directive);
+    DependentVars.add(Directive);
+  }
+
+  void pop() {
+    SharedAndPrivateVars.pop();
+    Directives.pop();
+    DependentVars.pop();
+  }
+
+  DependentVariableState DependentVars;
+  SharedAndPrivateState SharedAndPrivateVars;
+  DirectiveState Directives;
 };
 
 class Visitor : public RecursiveASTVisitor<Visitor> {
@@ -250,10 +273,11 @@ public:
 
   bool TraverseDeclRefExpr(DeclRefExpr *DRef) {
     const ValueDecl *Var = DRef->getDecl();
-    const bool IsShared = State.isShared(Var);
+    const bool IsShared = State.SharedAndPrivateVars.isShared(Var);
     const bool WasAtSomePointDependent =
         State.DependentVars.wasAtSomePointDependent(Var);
-    const bool WasAtSomePointShared = State.wasAtSomePointShared(Var);
+    const bool WasAtSomePointShared =
+        State.SharedAndPrivateVars.wasAtSomePointShared(Var);
     if (!IsShared && !WasAtSomePointDependent && !WasAtSomePointShared)
       return true;
 
@@ -272,16 +296,18 @@ public:
     if (!IsProtected) {
       if (IsDependent)
         ContextResults[Var].UnprotectedDependentAcesses.insert(
-            AnalysisResult::Result{DRef, State.AncestorContext, IsDependent,
-                                   WasAtSomePointDependent});
+            AnalysisResult::Result{DRef, State.Directives.AncestorContext,
+                                   IsDependent, WasAtSomePointDependent});
       else
-        ContextResults[Var].UnprotectedAcesses.insert(AnalysisResult::Result{
-            DRef, State.AncestorContext, IsDependent, WasAtSomePointDependent});
+        ContextResults[Var].UnprotectedAcesses.insert(
+            AnalysisResult::Result{DRef, State.Directives.AncestorContext,
+                                   IsDependent, WasAtSomePointDependent});
     }
 
     if (isMutating(DRef))
-      ContextResults[Var].Mutations.insert(AnalysisResult::Result{
-          DRef, State.AncestorContext, IsDependent, WasAtSomePointDependent});
+      ContextResults[Var].Mutations.insert(
+          AnalysisResult::Result{DRef, State.Directives.AncestorContext,
+                                 IsDependent, WasAtSomePointDependent});
 
     return true;
   }
@@ -321,7 +347,7 @@ public:
   }
 
   bool isMutating(const DeclRefExpr *DRef) const {
-    if (State.DirectiveStack.empty())
+    if (State.Directives.DirectiveStack.empty())
       return false;
     const ValueDecl *Dec = DRef->getDecl();
 
@@ -375,7 +401,7 @@ public:
       return false;
 
     ExprMutationAnalyzer Analyzer(
-        *State.DirectiveStack.back()->getStructuredBlock(), Ctx);
+        *State.Directives.DirectiveStack.back()->getStructuredBlock(), Ctx);
 
     return Analyzer.isMutated(DRef);
   }
@@ -384,7 +410,7 @@ public:
   void markCapturesAsMutations(const OMPExecutableDirective *const Directive) {
     for (const ValueDecl *const Val : getCaptureDeclsOf<Clause>(Directive))
       ContextResults[Val].Mutations.insert(AnalysisResult::Result{
-          Directive, State.AncestorContext,
+          Directive, State.Directives.AncestorContext,
           State.DependentVars.isDependent(Val),
           State.DependentVars.wasAtSomePointDependent(Val)});
   }
