@@ -81,7 +81,6 @@ getSharedVariables(const OMPExecutableDirective *Directive) {
   eraseCapturedDeclsOf<OMPReductionClause>(Directive, PossiblySharedDecls);
   eraseCapturedDeclsOf<OMPTaskReductionClause>(Directive, PossiblySharedDecls);
   eraseCapturedDeclsOf<OMPInReductionClause>(Directive, PossiblySharedDecls);
-  eraseCapturedDeclsOf<OMPDependClause>(Directive, PossiblySharedDecls);
 
   return PossiblySharedDecls;
 }

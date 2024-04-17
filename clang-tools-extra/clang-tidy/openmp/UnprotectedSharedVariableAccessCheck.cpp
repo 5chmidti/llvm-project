@@ -319,7 +319,8 @@ public:
         State.DependentVars.wasAtSomePointDependent(Var);
     const bool WasAtSomePointShared =
         State.SharedAndPrivateVars.wasAtSomePointShared(Var);
-    if (!IsShared && !WasAtSomePointDependent && !WasAtSomePointShared)
+    if ((!IsShared && !WasAtSomePointDependent && !WasAtSomePointShared) ||
+        (WasAtSomePointDependent && !WasAtSomePointShared))
       return true;
 
     const bool IsReductionVariable = State.Reductions.isReductionVar(Var);
