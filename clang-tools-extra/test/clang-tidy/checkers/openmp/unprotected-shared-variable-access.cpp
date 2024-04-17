@@ -242,6 +242,15 @@ void var(int* Buffer, int BufferSize) {
         #pragma omp critical
         Sum = 10;
     }
+
+    #pragma omp parallel
+    {
+        #pragma omp single nowait
+        Sum = 0;
+
+        auto Val = Sum;
+// CHECK-MESSAGES: :[[@LINE-1]]:20: warning: do not access shared variable 'Sum' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
+    }
 }
 
 void varAtomic(int* Buffer, int BufferSize) {

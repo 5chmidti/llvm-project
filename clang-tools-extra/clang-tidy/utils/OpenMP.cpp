@@ -128,8 +128,10 @@ bool isUndeferredTask(const OMPExecutableDirective *const Directive,
 
 bool hasBarrier(const OMPExecutableDirective *const Directive,
                 const ASTContext &Ctx) {
+  const bool HasNowait = hasAnyClause<OMPNowaitClause>(Directive);
   if (llvm::isa<OMPBarrierDirective, OMPTaskwaitDirective,
-                OMPTaskgroupDirective, OMPSingleDirective>(Directive) ||
+                OMPTaskgroupDirective>(Directive) ||
+      (llvm::isa<OMPSingleDirective>(Directive) && !HasNowait) ||
       isUndeferredTask(Directive, Ctx))
     return true;
 
