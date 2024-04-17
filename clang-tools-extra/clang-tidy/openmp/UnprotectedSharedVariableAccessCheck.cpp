@@ -79,15 +79,22 @@ class DependentVariableState {
 public:
   void add(const OMPExecutableDirective *const Directive) {
     DependentVarsStack.push_back(getDependVariables(Directive));
+    CurrentDependentVars = DependentVarsStack.back();
     AllTimeDependentVars.insert(DependentVarsStack.back().begin(),
                                 DependentVarsStack.back().end());
   }
 
-  void pop() { DependentVarsStack.pop_back(); }
+  void pop() {
+    DependentVarsStack.pop_back();
+
+    if (!DependentVarsStack.empty())
+      CurrentDependentVars = DependentVarsStack.back();
+    else
+      CurrentDependentVars = {};
+  }
 
   bool isDependent(const ValueDecl *Var) const {
-    return !DependentVarsStack.empty() &&
-           llvm::is_contained(DependentVarsStack.back(), Var);
+    return llvm::is_contained(CurrentDependentVars, Var);
   }
 
   bool wasAtSomePointDependent(const ValueDecl *Var) const {
@@ -96,6 +103,7 @@ public:
 
 private:
   llvm::SmallPtrSet<const ValueDecl *, 4> AllTimeDependentVars;
+  llvm::SmallPtrSet<const ValueDecl *, 4> CurrentDependentVars;
   llvm::SmallVector<llvm::SmallPtrSet<const ValueDecl *, 4>> DependentVarsStack;
 };
 
