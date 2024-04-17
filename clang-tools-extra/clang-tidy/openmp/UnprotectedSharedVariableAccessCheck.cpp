@@ -75,6 +75,16 @@ AST_MATCHER(OMPExecutableDirective, isOMPTargetDirective) {
   return isOpenMPTargetExecutionDirective(Node.getDirectiveKind());
 }
 
+bool isOMPLockType(const QualType &QType) {
+  if (QType.isNull())
+    return false;
+
+  const std::string UnqualifiedTypeAsString =
+      QualType(QType->getUnqualifiedDesugaredType(), 0).getAsString();
+
+  return UnqualifiedTypeAsString == "struct omp_lock_t";
+}
+
 class DependentVariableState {
 public:
   void add(const OMPExecutableDirective *const Directive) {
@@ -355,13 +365,14 @@ public:
     const bool IsMapped = State.Target.isMapped(Var);
     if ((!IsShared && !WasAtSomePointDependent && !WasAtSomePointShared &&
          !Global && !IsMapped) ||
+        isOMPLockType(Var->getType()) ||
         (WasAtSomePointDependent && !WasAtSomePointShared))
       return true;
 
     const bool IsReductionVariable = State.Reductions.isReductionVar(Var);
     const bool IsThreadLocal = Variable && Variable->getStorageDuration() ==
                                                StorageDuration::SD_Thread;
-    bool IsProtected = IsReductionVariable ||
+    bool IsProtected = LockedRegionCount > 0 || IsReductionVariable ||
                        Var->hasAttr<OMPThreadPrivateDeclAttr>() ||
                        IsThreadLocal;
     if (!IsProtected && !State.Directives.isInTeamsDirective()) {
@@ -408,6 +419,14 @@ public:
       return true;
     if (llvm::is_contained(CallStack, FDecl))
       return true;
+
+    llvm::StringRef FunctionName;
+    if (FDecl->getDeclName().isIdentifier())
+      FunctionName = FDecl->getName();
+    if (FunctionName == "omp_set_lock")
+      ++LockedRegionCount;
+    else if (FunctionName == "omp_unset_lock")
+      --LockedRegionCount;
     CallStack.push_back(FDecl);
     if (FDecl->hasBody())
       TraverseStmt(FDecl->getBody());
@@ -424,6 +443,14 @@ public:
       return true;
     if (llvm::is_contained(CallStack, FDecl))
       return true;
+
+    llvm::StringRef FunctionName;
+    if (FDecl->getDeclName().isIdentifier())
+      FunctionName = FDecl->getName();
+    if (FunctionName == "omp_set_lock")
+      ++LockedRegionCount;
+    else if (FunctionName == "omp_unset_lock")
+      --LockedRegionCount;
     CallStack.push_back(FDecl);
     if (FDecl->hasBody())
       TraverseStmt(FDecl->getBody());
@@ -555,6 +582,10 @@ private:
       Results;
 
   llvm::SmallVector<const Decl *> CallStack;
+
+  // FIXME: support RAII locks, which may mean tracking scopes because destruct
+  // expressions don't have their own AST node
+  size_t LockedRegionCount = 0;
 
   VariableState State;
   ASTContext &Ctx;

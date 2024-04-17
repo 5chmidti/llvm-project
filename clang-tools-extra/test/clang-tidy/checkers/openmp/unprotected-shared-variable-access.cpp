@@ -33,6 +33,11 @@ void doesNotMutateC(const _Atomic int&);
 
 int Global = 0;
 
+struct omp_lock_t {};
+void omp_init_lock(omp_lock_t*);
+void omp_set_lock(omp_lock_t*);
+void omp_unset_lock(omp_lock_t*);
+
 struct StaticStorage {
     static int StaticMember;
     static int StaticThreadPrivate;
@@ -1199,6 +1204,21 @@ void barrier() {
 
         #pragma omp critical
         Sum = 1;
+    }
+}
+
+void lock() {
+    omp_lock_t l;
+    omp_init_lock(&l);
+
+    int Sum = 0;
+
+    #pragma omp parallel
+    {
+        omp_set_lock(&l);
+        Sum = 10;
+// CHECK-MESSAGES: :[[@LINE-1]]:9: warning: do not access shared variable 'Sum' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
+        omp_unset_lock(&l);
     }
 }
 
