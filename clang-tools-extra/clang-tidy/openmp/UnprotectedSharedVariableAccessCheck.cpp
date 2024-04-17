@@ -185,23 +185,54 @@ public:
       PrivatizedVarsStack;
 };
 
+class ReductionState {
+public:
+  void add(const OMPExecutableDirective *Directive) {
+    ReductionVarsStack.push_back({});
+    llvm::set_union(ReductionVarsStack.back(),
+                    getCaptureDeclsOf<OMPReductionClause>(Directive));
+    llvm::set_union(ReductionVarsStack.back(),
+                    getCaptureDeclsOf<OMPInReductionClause>(Directive));
+    llvm::set_union(ReductionVarsStack.back(),
+                    getCaptureDeclsOf<OMPTaskReductionClause>(Directive));
+
+    llvm::set_union(CurrentReductionVariables, ReductionVarsStack.back());
+  }
+
+  void pop() {
+    llvm::set_difference(CurrentReductionVariables, ReductionVarsStack.back());
+    ReductionVarsStack.pop_back();
+  }
+
+  bool isReductionVar(const ValueDecl *const Var) {
+    return CurrentReductionVariables.contains(Var);
+  }
+
+private:
+  llvm::SmallVector<llvm::SmallPtrSet<const ValueDecl *, 4>> ReductionVarsStack;
+  llvm::SmallPtrSet<const ValueDecl *, 4> CurrentReductionVariables;
+};
+
 class VariableState {
 public:
   void add(const OMPExecutableDirective *Directive) {
     SharedAndPrivateVars.add(Directive);
     Directives.add(Directive);
     DependentVars.add(Directive);
+    Reductions.add(Directive);
   }
 
   void pop() {
     SharedAndPrivateVars.pop();
     Directives.pop();
     DependentVars.pop();
+    Reductions.pop();
   }
 
   DependentVariableState DependentVars;
   SharedAndPrivateState SharedAndPrivateVars;
   DirectiveState Directives;
+  ReductionState Reductions;
 };
 
 class Visitor : public RecursiveASTVisitor<Visitor> {
@@ -281,15 +312,19 @@ public:
     if (!IsShared && !WasAtSomePointDependent && !WasAtSomePointShared)
       return true;
 
-    // FIXME: can use traversal to know if there is an ancestor
-    const auto MatchResult =
-        match(declRefExpr(hasAncestor(ompExecutableDirective(
-                  anyOf(ompProtectedAccessDirective().bind("protected"),
-                        ompTaskDirective())))),
-              *DRef, Ctx);
-    const bool IsProtected =
-        !MatchResult.empty() &&
-        MatchResult[0].getNodeAs<OMPExecutableDirective>("protected");
+    const bool IsReductionVariable = State.Reductions.isReductionVar(Var);
+    bool IsProtected = IsReductionVariable;
+    if (!IsProtected) {
+      // FIXME: can use traversal to know if there is an ancestor
+      const auto MatchResult =
+          match(declRefExpr(hasAncestor(ompExecutableDirective(
+                    anyOf(ompProtectedAccessDirective().bind("protected"),
+                          ompTaskDirective())))),
+                *DRef, Ctx);
+      IsProtected =
+          !MatchResult.empty() &&
+          MatchResult[0].getNodeAs<OMPExecutableDirective>("protected");
+    }
 
     const bool IsDependent = State.DependentVars.isDependent(Var);
 
