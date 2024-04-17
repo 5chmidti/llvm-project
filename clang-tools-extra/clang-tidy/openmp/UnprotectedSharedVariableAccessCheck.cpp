@@ -117,6 +117,7 @@ public:
     DirectiveStack.pop_back();
     AncestorContext.pop_back();
   }
+
   llvm::SmallVector<const OMPExecutableDirective *> DirectiveStack;
   llvm::SmallVector<OpenMPDirectiveKind, 8> AncestorContext;
 };
@@ -186,6 +187,7 @@ public:
     return llvm::find(AllTimeSharedVars, Var) != AllTimeSharedVars.end();
   }
 
+private:
   llvm::SmallVector<std::pair<const ValueDecl *, size_t>> CurrentSharedVars;
   llvm::SmallPtrSet<const ValueDecl *, 4> AllTimeSharedVars;
   llvm::SmallVector<llvm::SmallPtrSet<const ValueDecl *, 4>> SharedVarsStack;
