@@ -75,6 +75,106 @@ AST_MATCHER(OMPExecutableDirective, isOMPTargetDirective) {
   return isOpenMPTargetExecutionDirective(Node.getDirectiveKind());
 }
 
+class VariableState {
+public:
+  void add(const OMPExecutableDirective *Directive) {
+    const auto Shared = getSharedVariables(Directive);
+    for (const ValueDecl *SharedVar : Shared) {
+      auto *const Iter = llvm::find_if(CurrentSharedVars,
+                                       [SharedVar](const auto &VarAndCount) {
+                                         return VarAndCount.first == SharedVar;
+                                       });
+      if (Iter != CurrentSharedVars.end())
+        ++Iter->second;
+      else {
+        CurrentSharedVars.emplace_back(SharedVar, 1U);
+        AllTimeSharedVars.insert(SharedVar);
+      }
+    }
+
+    llvm::SmallVector<std::pair<const ValueDecl *, size_t>> PrivatizedVariables;
+
+    for (const ValueDecl *PrivateVar : getPrivatizedVariables(Directive)) {
+      auto *const Iter = llvm::find_if(CurrentSharedVars,
+                                       [PrivateVar](const auto &VarAndCount) {
+                                         return VarAndCount.first == PrivateVar;
+                                       });
+      if (Iter != CurrentSharedVars.end()) {
+        PrivatizedVariables.push_back(*Iter);
+        CurrentSharedVars.erase(Iter);
+        AllTimeSharedVars.erase(Iter->first);
+      }
+    }
+
+    SharedVarsStack.push_back(Shared);
+    PrivatizedVarsStack.push_back(PrivatizedVariables);
+    DependentVarsStack.push_back(getDependVariables(Directive));
+    CurrentDependentVars = DependentVarsStack.back();
+    AllTimeDependentVars.insert(DependentVarsStack.back().begin(),
+                                DependentVarsStack.back().end());
+    DirectiveStack.push_back(Directive);
+    AncestorContext.push_back(Directive->getDirectiveKind());
+  }
+
+  void pop() {
+    CurrentSharedVars.append(PrivatizedVarsStack.back());
+    PrivatizedVarsStack.pop_back();
+    const llvm::SmallPtrSet<const ValueDecl *, 4> &LatestSharedScopeChange =
+        SharedVarsStack.back();
+    for (const ValueDecl *const SharedVar : LatestSharedScopeChange) {
+      auto *const Iter = llvm::find_if(CurrentSharedVars,
+                                       [SharedVar](const auto &VarAndCount) {
+                                         return VarAndCount.first == SharedVar;
+                                       });
+      if (Iter != CurrentSharedVars.end()) {
+        --Iter->second;
+        if (Iter->second == 0)
+          CurrentSharedVars.erase(Iter);
+      }
+    }
+    SharedVarsStack.pop_back();
+    DirectiveStack.pop_back();
+    AncestorContext.pop_back();
+    DependentVarsStack.pop_back();
+
+    if (!DependentVarsStack.empty())
+      CurrentDependentVars = DependentVarsStack.back();
+    else
+      CurrentDependentVars = {};
+  }
+
+  bool isShared(const ValueDecl *Var) const {
+    return llvm::find_if(CurrentSharedVars,
+                         [Var](const auto &SharedVarWithCount) {
+                           return SharedVarWithCount.first == Var;
+                         }) != CurrentSharedVars.end();
+  }
+
+  bool isDependent(const ValueDecl *Var) const {
+    return llvm::is_contained(CurrentDependentVars, Var);
+  }
+
+  bool wasAtSomePointDependent(const ValueDecl *Var) const {
+    return llvm::find(AllTimeDependentVars, Var) != AllTimeDependentVars.end();
+  }
+
+  bool wasAtSomePointShared(const ValueDecl *Var) const {
+    return llvm::find(AllTimeSharedVars, Var) != AllTimeSharedVars.end();
+  }
+
+  // private:
+  llvm::SmallVector<std::pair<const ValueDecl *, size_t>> CurrentSharedVars;
+  llvm::SmallPtrSet<const ValueDecl *, 4> CurrentDependentVars;
+  llvm::SmallPtrSet<const ValueDecl *, 4> AllTimeDependentVars;
+  llvm::SmallPtrSet<const ValueDecl *, 4> AllTimeSharedVars;
+  llvm::SmallVector<llvm::SmallPtrSet<const ValueDecl *, 4>> SharedVarsStack;
+  llvm::SmallVector<llvm::SmallVector<std::pair<const ValueDecl *, size_t>>>
+      PrivatizedVarsStack;
+  llvm::SmallVector<llvm::SmallPtrSet<const ValueDecl *, 4>> DependentVarsStack;
+  llvm::SmallVector<const OMPExecutableDirective *> DirectiveStack;
+  llvm::SmallVector<OpenMPDirectiveKind, 8> AncestorContext;
+};
+
 class Visitor : public RecursiveASTVisitor<Visitor> {
 public:
   Visitor(ASTContext &Ctx, llvm::ArrayRef<llvm::StringRef> ThreadSafeTypes,
@@ -109,111 +209,6 @@ public:
     llvm::SmallSet<Result, 4> Mutations;
     llvm::SmallSet<Result, 4> UnprotectedAcesses;
     llvm::SmallSet<Result, 4> UnprotectedDependentAcesses;
-  };
-
-  class SharedVariableState {
-  public:
-    void add(const OMPExecutableDirective *Directive) {
-      const auto Shared = getSharedVariables(Directive);
-      for (const ValueDecl *SharedVar : Shared) {
-        auto *const Iter = llvm::find_if(
-            CurrentSharedVariables, [SharedVar](const auto &VarAndCount) {
-              return VarAndCount.first == SharedVar;
-            });
-        if (Iter != CurrentSharedVariables.end())
-          ++Iter->second;
-        else {
-          CurrentSharedVariables.emplace_back(SharedVar, 1U);
-          AllTimeSharedVariables.insert(SharedVar);
-        }
-      }
-
-      llvm::SmallVector<std::pair<const ValueDecl *, size_t>>
-          PrivatizedVariables;
-
-      for (const ValueDecl *PrivateVar : getPrivatizedVariables(Directive)) {
-        auto *const Iter = llvm::find_if(
-            CurrentSharedVariables, [PrivateVar](const auto &VarAndCount) {
-              return VarAndCount.first == PrivateVar;
-            });
-        if (Iter != CurrentSharedVariables.end()) {
-          PrivatizedVariables.push_back(*Iter);
-          CurrentSharedVariables.erase(Iter);
-          AllTimeSharedVariables.erase(Iter->first);
-        }
-      }
-
-      SharedVarsStack.push_back(Shared);
-      PrivatizedVarsStack.push_back(PrivatizedVariables);
-      DependentVarsStack.push_back(getDependVariables(Directive));
-      CurrentDependentVariables = DependentVarsStack.back();
-      AllTimeDependentVariables.insert(DependentVarsStack.back().begin(),
-                                       DependentVarsStack.back().end());
-      DirectiveStack.push_back(Directive);
-      AncestorContext.push_back(Directive->getDirectiveKind());
-    }
-
-    void pop() {
-      CurrentSharedVariables.append(PrivatizedVarsStack.back());
-      PrivatizedVarsStack.pop_back();
-      const llvm::SmallPtrSet<const ValueDecl *, 4> &LatestSharedScopeChange =
-          SharedVarsStack.back();
-      for (const ValueDecl *const SharedVar : LatestSharedScopeChange) {
-        auto *const Iter = llvm::find_if(
-            CurrentSharedVariables, [SharedVar](const auto &VarAndCount) {
-              return VarAndCount.first == SharedVar;
-            });
-        if (Iter != CurrentSharedVariables.end()) {
-          --Iter->second;
-          if (Iter->second == 0)
-            CurrentSharedVariables.erase(Iter);
-        }
-      }
-      SharedVarsStack.pop_back();
-      DirectiveStack.pop_back();
-      AncestorContext.pop_back();
-      DependentVarsStack.pop_back();
-
-      if (!DependentVarsStack.empty())
-        CurrentDependentVariables = DependentVarsStack.back();
-      else
-        CurrentDependentVariables = {};
-    }
-
-    bool isShared(const ValueDecl *Var) const {
-      return llvm::find_if(CurrentSharedVariables,
-                           [Var](const auto &SharedVarWithCount) {
-                             return SharedVarWithCount.first == Var;
-                           }) != CurrentSharedVariables.end();
-    }
-
-    bool isDependent(const ValueDecl *Var) const {
-      return llvm::is_contained(CurrentDependentVariables, Var);
-    }
-
-    bool wasAtSomePointDependent(const ValueDecl *Var) const {
-      return llvm::find(AllTimeDependentVariables, Var) !=
-             AllTimeDependentVariables.end();
-    }
-
-    bool wasAtSomePointShared(const ValueDecl *Var) const {
-      return llvm::find(AllTimeSharedVariables, Var) !=
-             AllTimeSharedVariables.end();
-    }
-
-    // private:
-    llvm::SmallVector<std::pair<const ValueDecl *, size_t>>
-        CurrentSharedVariables;
-    llvm::SmallPtrSet<const ValueDecl *, 4> CurrentDependentVariables;
-    llvm::SmallPtrSet<const ValueDecl *, 4> AllTimeDependentVariables;
-    llvm::SmallPtrSet<const ValueDecl *, 4> AllTimeSharedVariables;
-    llvm::SmallVector<llvm::SmallPtrSet<const ValueDecl *, 4>> SharedVarsStack;
-    llvm::SmallVector<llvm::SmallVector<std::pair<const ValueDecl *, size_t>>>
-        PrivatizedVarsStack;
-    llvm::SmallVector<llvm::SmallPtrSet<const ValueDecl *, 4>>
-        DependentVarsStack;
-    llvm::SmallVector<const OMPExecutableDirective *> DirectiveStack;
-    llvm::SmallVector<OpenMPDirectiveKind, 8> AncestorContext;
   };
 
   bool TraverseOMPExecutableDirective(OMPExecutableDirective *Directive) {
@@ -442,7 +437,7 @@ private:
 
   llvm::SmallVector<const Decl *> CallStack;
 
-  SharedVariableState State;
+  VariableState State;
   ASTContext &Ctx;
   const llvm::ArrayRef<llvm::StringRef> ThreadSafeTypes;
   const llvm::ArrayRef<llvm::StringRef> ThreadSafeFunctions;
