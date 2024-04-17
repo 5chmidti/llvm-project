@@ -75,29 +75,6 @@ AST_MATCHER(OMPExecutableDirective, isOMPTargetDirective) {
   return isOpenMPTargetExecutionDirective(Node.getDirectiveKind());
 }
 
-bool isOpenMPDirectiveKind(const OpenMPDirectiveKind DKind,
-                           const OpenMPDirectiveKind Expected) {
-  return DKind == Expected ||
-         llvm::is_contained(getLeafConstructs(DKind), Expected);
-}
-
-bool isUndeferredTask(const OMPExecutableDirective *const Directive,
-                      const ASTContext &Ctx) {
-  const auto *const Task = llvm::dyn_cast<OMPTaskDirective>(Directive);
-  if (!Task)
-    return false;
-
-  for (const auto *const Clause : Task->clauses()) {
-    const auto *const If = llvm::dyn_cast<OMPIfClause>(Clause);
-    if (!If)
-      continue;
-    bool Result = false;
-    if (If->getCondition()->EvaluateAsBooleanCondition(Result, Ctx) && !Result)
-      return true;
-  }
-  return false;
-}
-
 class Visitor : public RecursiveASTVisitor<Visitor> {
 public:
   Visitor(ASTContext &Ctx, llvm::ArrayRef<llvm::StringRef> ThreadSafeTypes,
@@ -259,10 +236,11 @@ public:
     Base::TraverseStmt(Statement);
     State.pop();
 
-    if (isUndeferredTask(Directive, Ctx))
-      startNewEpochIfEncountered<OMPTaskDirective>(Directive);
-    else
-      startNewEpochIfEncountered<OMPTaskgroupDirective>(Directive);
+    if (hasBarrier(Directive, Ctx)) {
+      if (!(startNewEpochIfEncountered<OMPTaskDirective>(Directive) ||
+            startNewEpochIfEncountered<OMPTaskgroupDirective>(Directive)))
+        saveAnalysisAndStartNewEpoch();
+    }
 
     return true;
   }
@@ -409,21 +387,28 @@ public:
   }
 
   template <typename DirectiveType>
-  void
+  bool
   startNewEpochIfEncountered(const OMPExecutableDirective *const Directive) {
-    if (const auto *const CastDirective =
-            llvm::dyn_cast<DirectiveType>(Directive)) {
-      const auto Clauses = CastDirective->clauses();
-      if (Clauses.empty()) {
-        saveAnalysisAndStartNewEpoch();
-        return;
-      }
-      for (const OMPClause *const Clause : Clauses)
-        if (const auto *const Depend = llvm::dyn_cast<OMPDependClause>(Clause))
-          for (const auto *const VarExpr : Depend->getVarRefs())
-            if (const auto *const DRef = llvm::dyn_cast<DeclRefExpr>(VarExpr))
-              saveAnalysisAndStartNewEpoch(DRef->getDecl());
+    const auto *const CastDirective = llvm::dyn_cast<DirectiveType>(Directive);
+    if (!CastDirective)
+      return false;
+
+    const auto Clauses = CastDirective->clauses();
+    if (Clauses.empty()) {
+      saveAnalysisAndStartNewEpoch();
+      return true;
     }
+
+    bool Result = false;
+    for (const OMPClause *const Clause : Clauses)
+      if (const auto *const Depend = llvm::dyn_cast<OMPDependClause>(Clause))
+        for (const auto *const VarExpr : Depend->getVarRefs())
+          if (const auto *const DRef = llvm::dyn_cast<DeclRefExpr>(VarExpr)) {
+            saveAnalysisAndStartNewEpoch(DRef->getDecl());
+            Result = true;
+          }
+
+    return Result;
   }
 
   llvm::SmallVector<

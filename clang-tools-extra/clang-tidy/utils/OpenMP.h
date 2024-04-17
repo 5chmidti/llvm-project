@@ -12,6 +12,9 @@
 #include "clang/AST/OpenMPClause.h"
 #include "clang/ASTMatchers/ASTMatchers.h"
 #include "clang/ASTMatchers/ASTMatchersInternal.h"
+#include "clang/Basic/OpenMPKinds.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/Frontend/OpenMP/OMP.h.inc"
 #include <llvm/ADT/SmallPtrSet.h>
 
 namespace clang {
@@ -69,6 +72,29 @@ getPrivatizedVariables(const OMPExecutableDirective *Directive);
 
 llvm::SmallPtrSet<const clang::ValueDecl *, 4>
 getDependVariables(const OMPExecutableDirective *Directive);
+
+bool isUndeferredTask(const OMPExecutableDirective *const Directive,
+                      const ASTContext &Ctx);
+
+bool hasBarrier(const OMPExecutableDirective *const Directive,
+                const ASTContext &Ctx);
+
+bool isOpenMPDirectiveKind(const OpenMPDirectiveKind DKind,
+                           const OpenMPDirectiveKind Expected);
+
+template <typename... OMPDirectiveKinds>
+bool isOpenMPDirectiveKind(const OpenMPDirectiveKind Kind,
+                           const OMPDirectiveKinds... Expected) {
+  const auto LeafConstructs = llvm::omp::getLeafConstructs(Kind);
+  return ((Kind == Expected || llvm::is_contained(LeafConstructs, Expected)) ||
+          ...);
+}
+
+template <typename... ClauseTypes>
+bool hasAnyClause(const OMPExecutableDirective *const Directive) {
+  return (!Directive->getClausesOfKind<ClauseTypes>().empty() || ...);
+}
+
 } // namespace clang::tidy::openmp
 
 #endif // LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_OPENMP_H

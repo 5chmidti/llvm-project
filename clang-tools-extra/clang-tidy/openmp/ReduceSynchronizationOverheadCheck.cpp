@@ -346,9 +346,9 @@ void ReduceSynchronizationOverheadCheck::check(
     for (const ValueDecl *const Shared : SharedVariables) {
       std::vector<DiagnosticData> DiagData;
       const auto IsAReductionVariable = hasAncestor(ompExecutableDirective(
-          anyOf(hasAnyClause(
+          anyOf(ast_matchers::hasAnyClause(
                     ompReductionClause(reducesVariable(equalsNode(Shared)))),
-                hasAnyClause(ompTaskReductionClause(
+                ast_matchers::hasAnyClause(ompTaskReductionClause(
                     reducesVariable(equalsNode(Shared)))))));
 
       const auto CriticalSections = match(
