@@ -104,11 +104,11 @@ public:
   }
 
   bool isDependent(const ValueDecl *Var) const {
-    return llvm::is_contained(CurrentDependentVars, Var);
+    return CurrentDependentVars.contains(Var);
   }
 
   bool wasAtSomePointDependent(const ValueDecl *Var) const {
-    return llvm::find(AllTimeDependentVars, Var) != AllTimeDependentVars.end();
+    return AllTimeDependentVars.contains(Var);
   }
 
 private:
@@ -200,7 +200,7 @@ public:
   }
 
   bool wasAtSomePointShared(const ValueDecl *Var) const {
-    return llvm::find(AllTimeSharedVars, Var) != AllTimeSharedVars.end();
+    return AllTimeSharedVars.contains(Var);
   }
 
 private:
@@ -230,7 +230,7 @@ public:
     ReductionVarsStack.pop_back();
   }
 
-  bool isReductionVar(const ValueDecl *const Var) {
+  bool isReductionVar(const ValueDecl *const Var) const {
     return CurrentReductionVariables.contains(Var);
   }
 
@@ -252,9 +252,10 @@ public:
   void pop() { MappedStack.pop_back(); }
 
   bool isMapped(const ValueDecl *const Var) const {
-    return llvm::any_of(MappedStack, [Var](const auto &Set) {
-      return llvm::is_contained(Set, Var);
-    });
+    return llvm::any_of(
+        MappedStack, [Var](const llvm::SmallPtrSet<const ValueDecl *, 4> &Set) {
+          return Set.contains(Var);
+        });
   }
 
 private:
