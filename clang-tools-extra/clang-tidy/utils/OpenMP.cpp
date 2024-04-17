@@ -109,10 +109,4 @@ getDependVariables(const OMPExecutableDirective *Directive) {
 
   return Decls;
 }
-
-SharedAndPrivateVariables
-getSharedAndPrivateVariable(const OMPExecutableDirective *Directive) {
-  return {getSharedVariables(Directive), getPrivatizedVariables(Directive),
-          getDependVariables(Directive)};
-}
 } // namespace clang::tidy::openmp

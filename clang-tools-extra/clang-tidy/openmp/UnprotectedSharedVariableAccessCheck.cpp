@@ -137,9 +137,8 @@ public:
   class SharedVariableState {
   public:
     void add(const OMPExecutableDirective *Directive) {
-      const openmp::SharedAndPrivateVariables SharedAndPrivateVars =
-          openmp::getSharedAndPrivateVariable(Directive);
-      for (const ValueDecl *SharedVar : SharedAndPrivateVars.Shared) {
+      const auto Shared = getSharedVariables(Directive);
+      for (const ValueDecl *SharedVar : Shared) {
         auto *const Iter = llvm::find_if(
             CurrentSharedVariables, [SharedVar](const auto &VarAndCount) {
               return VarAndCount.first == SharedVar;
@@ -153,7 +152,7 @@ public:
       llvm::SmallVector<std::pair<const ValueDecl *, size_t>>
           PrivatizedVariables;
 
-      for (const ValueDecl *PrivateVar : SharedAndPrivateVars.Private) {
+      for (const ValueDecl *PrivateVar : getPrivatizedVariables(Directive)) {
         auto *const Iter = llvm::find_if(
             CurrentSharedVariables, [PrivateVar](const auto &VarAndCount) {
               return VarAndCount.first == PrivateVar;
@@ -164,9 +163,9 @@ public:
         }
       }
 
-      SharedVarsStack.push_back(SharedAndPrivateVars.Shared);
+      SharedVarsStack.push_back(Shared);
       PrivatizedVarsStack.push_back(PrivatizedVariables);
-      DependentVarsStack.push_back(SharedAndPrivateVars.Dependent);
+      DependentVarsStack.push_back(getDependVariables(Directive));
       CurrentDependentVariables = DependentVarsStack.back();
       AllTimeDependentVariables.insert(DependentVarsStack.back().begin(),
                                        DependentVarsStack.back().end());
