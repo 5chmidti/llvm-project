@@ -1073,6 +1073,29 @@ void tasks() {
         auto Val2 = Sum2;
 // CHECK-MESSAGES: :[[@LINE-1]]:21: warning: do not access shared variable 'Sum2' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
     }
+
+    #pragma omp parallel
+    {
+        int Local = 10;
+
+        #pragma omp task
+        Local = 0;
+// CHECK-MESSAGES: :[[@LINE-1]]:9: warning: do not access shared variable 'Local' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
+
+        auto Val = Local;
+// CHECK-MESSAGES: :[[@LINE-1]]:20: warning: do not access shared variable 'Local' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
+    }
+
+    #pragma omp parallel
+    {
+        int Local = 10;
+
+        #pragma omp task depend(out: Local)
+        Local = 0;
+
+        auto Val = Local;
+// CHECK-MESSAGES: :[[@LINE-1]]:20: warning: do not access shared variable 'Sum2' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
+    }
 }
 
 void barrier() {

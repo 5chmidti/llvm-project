@@ -145,8 +145,10 @@ public:
             });
         if (Iter != CurrentSharedVariables.end())
           ++Iter->second;
-        else
+        else {
           CurrentSharedVariables.emplace_back(SharedVar, 1U);
+          AllTimeSharedVariables.insert(SharedVar);
+        }
       }
 
       llvm::SmallVector<std::pair<const ValueDecl *, size_t>>
@@ -160,6 +162,7 @@ public:
         if (Iter != CurrentSharedVariables.end()) {
           PrivatizedVariables.push_back(*Iter);
           CurrentSharedVariables.erase(Iter);
+          AllTimeSharedVariables.erase(Iter->first);
         }
       }
 
@@ -216,11 +219,17 @@ public:
              AllTimeDependentVariables.end();
     }
 
+    bool wasAtSomePointShared(const ValueDecl *Var) const {
+      return llvm::find(AllTimeSharedVariables, Var) !=
+             AllTimeSharedVariables.end();
+    }
+
     // private:
     llvm::SmallVector<std::pair<const ValueDecl *, size_t>>
         CurrentSharedVariables;
     llvm::SmallPtrSet<const ValueDecl *, 4> CurrentDependentVariables;
     llvm::SmallPtrSet<const ValueDecl *, 4> AllTimeDependentVariables;
+    llvm::SmallPtrSet<const ValueDecl *, 4> AllTimeSharedVariables;
     llvm::SmallVector<llvm::SmallPtrSet<const ValueDecl *, 4>> SharedVarsStack;
     llvm::SmallVector<llvm::SmallVector<std::pair<const ValueDecl *, size_t>>>
         PrivatizedVarsStack;
@@ -264,7 +273,8 @@ public:
     const ValueDecl *Var = DRef->getDecl();
     const bool IsShared = State.isShared(Var);
     const bool WasAtSomePointDependent = State.wasAtSomePointDependent(Var);
-    if (!IsShared && !WasAtSomePointDependent)
+    const bool WasAtSomePointShared = State.wasAtSomePointShared(Var);
+    if (!IsShared && !WasAtSomePointDependent && !WasAtSomePointShared)
       return true;
 
     // FIXME: can use traversal to know if there is an ancestor
