@@ -118,6 +118,12 @@ public:
     AncestorContext.pop_back();
   }
 
+  bool isInTeamsDirective() const {
+    return llvm::any_of(AncestorContext, [](const OpenMPDirectiveKind Kind) {
+      return isOpenMPDirectiveKind(Kind, OpenMPDirectiveKind::OMPD_teams);
+    });
+  }
+
   llvm::SmallVector<const OMPExecutableDirective *> DirectiveStack;
   llvm::SmallVector<OpenMPDirectiveKind, 8> AncestorContext;
 };
@@ -223,6 +229,28 @@ private:
   llvm::SmallPtrSet<const ValueDecl *, 4> CurrentReductionVariables;
 };
 
+class TargetState {
+public:
+  void add(const OMPExecutableDirective *Directive) {
+    MappedStack.push_back({});
+    llvm::set_union(MappedStack.back(),
+                    getMappedDeclsOf<OMPMapClause>(Directive));
+    llvm::set_union(MappedStack.back(),
+                    getMappedDeclsOf<OMPDefaultmapClause>(Directive));
+  }
+
+  void pop() { MappedStack.pop_back(); }
+
+  bool isMapped(const ValueDecl *const Var) const {
+    return llvm::any_of(MappedStack, [Var](const auto &Set) {
+      return llvm::is_contained(Set, Var);
+    });
+  }
+
+private:
+  llvm::SmallVector<llvm::SmallPtrSet<const ValueDecl *, 4>> MappedStack;
+};
+
 class VariableState {
 public:
   void add(const OMPExecutableDirective *Directive) {
@@ -230,6 +258,7 @@ public:
     Directives.add(Directive);
     DependentVars.add(Directive);
     Reductions.add(Directive);
+    Target.add(Directive);
   }
 
   void pop() {
@@ -237,12 +266,14 @@ public:
     Directives.pop();
     DependentVars.pop();
     Reductions.pop();
+    Target.pop();
   }
 
   DependentVariableState DependentVars;
   SharedAndPrivateState SharedAndPrivateVars;
   DirectiveState Directives;
   ReductionState Reductions;
+  TargetState Target;
 };
 
 class Visitor : public RecursiveASTVisitor<Visitor> {
@@ -321,8 +352,9 @@ public:
         State.SharedAndPrivateVars.wasAtSomePointShared(Var);
     const auto *const Variable = llvm::dyn_cast<VarDecl>(Var);
     const bool Global = Variable && Variable->hasGlobalStorage();
+    const bool IsMapped = State.Target.isMapped(Var);
     if ((!IsShared && !WasAtSomePointDependent && !WasAtSomePointShared &&
-         !Global) ||
+         !Global && !IsMapped) ||
         (WasAtSomePointDependent && !WasAtSomePointShared))
       return true;
 
@@ -332,7 +364,7 @@ public:
     bool IsProtected = IsReductionVariable ||
                        Var->hasAttr<OMPThreadPrivateDeclAttr>() ||
                        IsThreadLocal;
-    if (!IsProtected) {
+    if (!IsProtected && !State.Directives.isInTeamsDirective()) {
       // FIXME: can use traversal to know if there is an ancestor
       const auto MatchResult =
           match(declRefExpr(hasAncestor(ompExecutableDirective(

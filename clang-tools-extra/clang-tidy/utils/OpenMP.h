@@ -9,12 +9,15 @@
 #ifndef LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_OPENMP_H
 #define LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_OPENMP_H
 
+#include "clang/AST/Expr.h"
+#include "clang/AST/ExprOpenMP.h"
 #include "clang/AST/OpenMPClause.h"
 #include "clang/ASTMatchers/ASTMatchers.h"
 #include "clang/ASTMatchers/ASTMatchersInternal.h"
 #include "clang/Basic/OpenMPKinds.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Frontend/OpenMP/OMP.h.inc"
+#include "llvm/Support/Casting.h"
 #include <llvm/ADT/SmallPtrSet.h>
 
 namespace clang {
@@ -64,6 +67,28 @@ getCaptureDeclsOf(const clang::OMPExecutableDirective *const Directive) {
         if (const auto Var = llvm::dyn_cast<clang::DeclRefExpr>(ClauseChild);
             Var)
           Decls.insert(Var->getDecl());
+  return Decls;
+}
+
+template <typename ClauseKind>
+llvm::SmallPtrSet<const clang::ValueDecl *, 4>
+getMappedDeclsOf(const clang::OMPExecutableDirective *const Directive) {
+  llvm::SmallPtrSet<const clang::ValueDecl *, 4> Decls;
+  for (const clang::OMPClause *const Clause : Directive->clauses())
+    if (const auto *const CastClause = llvm::dyn_cast<ClauseKind>(Clause))
+      for (const auto *const ClauseChild : CastClause->children()) {
+        if (const auto *const ArraySection =
+                llvm::dyn_cast<OMPArraySectionExpr>(ClauseChild)) {
+          if (const auto *const Base = ArraySection->getBase())
+            if (const auto *const DRef =
+                    llvm::dyn_cast<DeclRefExpr>(Base->IgnoreImpCasts()))
+              Decls.insert(DRef->getDecl());
+        } else if (const auto Var =
+                       llvm::dyn_cast<clang::DeclRefExpr>(ClauseChild);
+                   Var)
+          Decls.insert(Var->getDecl());
+      }
+
   return Decls;
 }
 

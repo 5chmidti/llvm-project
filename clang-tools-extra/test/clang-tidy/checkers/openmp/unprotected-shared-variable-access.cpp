@@ -1201,3 +1201,23 @@ void barrier() {
         Sum = 1;
     }
 }
+
+void target() {
+    int Sum = 0;
+    #pragma omp target map(to: Sum)
+    {
+        Sum = 0;
+// CHECK-MESSAGES: :[[@LINE-1]]:9: warning: do not access shared variable 'Sum' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
+    }
+
+    #pragma omp target teams map(to: Sum)
+    {
+        Sum = 0;
+// CHECK-MESSAGES: :[[@LINE-1]]:9: warning: do not access shared variable 'Sum' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
+    }
+
+    #pragma omp target teams distribute parallel for map(to: Sum) reduction(+: Sum)
+    for (int i = 0; i < 10; ++i) {
+        Sum += i;
+    }
+}
