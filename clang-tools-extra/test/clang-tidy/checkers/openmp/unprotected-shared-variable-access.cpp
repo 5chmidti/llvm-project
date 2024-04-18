@@ -25,9 +25,11 @@ namespace std {
 } // namespace std
 
 void doesMutate(int&);
+void doesMutate(int*);
 void doesMutate(std::atomic<int>&);
 void doesMutateC(_Atomic int&);
 void doesNotMutate(const int&);
+void doesNotMutate(const int*);
 void doesNotMutate(const std::atomic<int>&);
 void doesNotMutateC(const _Atomic int&);
 
@@ -289,6 +291,23 @@ void var(int* Buffer, int BufferSize) {
     #pragma omp parallel
     {
         StaticStorage::StaticThreadLocal = 0;
+    }
+
+    #pragma omp parallel
+    {
+        doesMutate(&Sum);
+// CHECK-MESSAGES: :[[@LINE-1]]:21: warning: do not access shared variable 'Sum' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
+    }
+
+    #pragma omp parallel
+    {
+        doesNotMutate(&Sum);
+    }
+
+    #pragma omp parallel
+    {
+        __sync_fetch_and_add(&Sum, 1);
+// CHECK-MESSAGES: :[[@LINE-1]]:31: warning: do not access shared variable 'Sum' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
     }
 }
 
@@ -1217,7 +1236,6 @@ void lock() {
     {
         omp_set_lock(&l);
         Sum = 10;
-// CHECK-MESSAGES: :[[@LINE-1]]:9: warning: do not access shared variable 'Sum' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
         omp_unset_lock(&l);
     }
 }
