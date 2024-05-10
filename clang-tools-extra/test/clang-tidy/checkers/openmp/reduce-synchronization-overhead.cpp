@@ -25,9 +25,9 @@ void foo() {
     #pragma omp parallel default(shared)
     {
 // CHECK-FIXES: #pragma omp atomic write
-// CHECK-FIXES-NEXT: x = 0;
+// CHECK-FIXES-NEXT: x = 1;
         #pragma omp critical
-            x = 0;
+            x = 1;
 
 // CHECK-FIXES: #pragma omp atomic update
 // CHECK-FIXES-NEXT: ++x;
@@ -44,9 +44,9 @@ void foo() {
     {
 // CHECK-MESSAGES: :[[@LINE+4]]:13: warning: this operation is declared with `omp atomic` but it does not involve a shared variable [openmp-reduce-synchronization-overhead]
 // CHECK-FIXES: {{^        $}}
-// CHECK-FIXES-NEXT: x = 0;
+// CHECK-FIXES-NEXT: x = 2;
         #pragma omp atomic write
-            x = 0;
+            x = 2;
 
 // CHECK-MESSAGES: :[[@LINE+4]]:13: warning: this operation is declared with `omp atomic` but it does not involve a shared variable [openmp-reduce-synchronization-overhead]
 // CHECK-FIXES: {{^        $}}
@@ -62,9 +62,9 @@ void foo() {
     #pragma omp parallel
     {
 // CHECK-FIXES: #pragma omp atomic write
-// CHECK-FIXES-NEXT: x = 0;
+// CHECK-FIXES-NEXT: x = 3;
         #pragma omp critical
-            x = 0;
+            x = 3;
 
 // CHECK-FIXES: #pragma omp atomic update
 // CHECK-FIXES-NEXT: ++x;
