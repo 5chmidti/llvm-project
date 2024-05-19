@@ -1264,4 +1264,21 @@ void target() {
     for (int i = 0; i < 10; ++i) {
         Sum += i;
     }
+
+    omp_lock_t l;
+    omp_init_lock(&l);
+
+    #pragma omp target teams map(to: Sum)
+    {
+        omp_set_lock(&l);
+        Sum = 0;
+// CHECK-MESSAGES: :[[@LINE-1]]:9: warning: do not access shared variable 'Sum' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
+        omp_unset_lock(&l);
+    }
+
+    #pragma omp target teams map(to: Sum)
+    {
+        #pragma omp atomic
+        Sum += 0;
+    }
 }

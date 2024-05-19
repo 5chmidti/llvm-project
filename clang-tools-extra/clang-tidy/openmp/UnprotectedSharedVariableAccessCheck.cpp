@@ -403,8 +403,11 @@ public:
       return true;
 
     const ValueDecl *Var = DRef->getDecl();
-
-    if (isOMPLockType(Var->getType()))
+    const auto *const Variable = llvm::dyn_cast<VarDecl>(Var);
+    const bool IsThreadLocal = Variable && Variable->getStorageDuration() ==
+                                               StorageDuration::SD_Thread;
+    if (isOMPLockType(Var->getType()) ||
+        Var->hasAttr<OMPThreadPrivateDeclAttr>() || IsThreadLocal)
       return true;
 
     const bool IsShared = State.SharedAndPrivateVars.is(
@@ -416,7 +419,6 @@ public:
     const bool IsPrivate = State.SharedAndPrivateVars.is(
         Var, SharedAndPrivateState::State::Private);
     const bool IsUnknown = State.SharedAndPrivateVars.isUnknown(Var);
-    const auto *const Variable = llvm::dyn_cast<VarDecl>(Var);
     const bool Global = Variable && Variable->hasGlobalStorage();
     const bool IsMapped = State.Target.isMapped(Var);
     if (!IsUnknown &&
@@ -430,16 +432,14 @@ public:
     }
 
     const bool IsReductionVariable = State.Reductions.isReductionVar(Var);
-    const bool IsThreadLocal = Variable && Variable->getStorageDuration() ==
-                                               StorageDuration::SD_Thread;
-    bool IsProtected = LockedRegionCount > 0 || IsReductionVariable ||
-                       Var->hasAttr<OMPThreadPrivateDeclAttr>() ||
-                       IsThreadLocal;
-    if (!IsProtected && !State.Directives.isInTeamsDirective()) {
+    bool IsProtected = LockedRegionCount > 0 || IsReductionVariable;
+    if (!IsProtected) {
       // FIXME: can use traversal to know if there is an ancestor
       const auto MatchResult =
           match(declRefExpr(hasAncestor(ompExecutableDirective(
-                    anyOf(ompProtectedAccessDirective().bind("protected"),
+                    anyOf((IsInTeamsDirective ? ompAtomicDirective()
+                                              : ompProtectedAccessDirective())
+                              .bind("protected"),
                           ompTaskDirective())))),
                 *DRef, Ctx);
       IsProtected =
