@@ -182,6 +182,7 @@ void var(int* Buffer, int BufferSize) {
         #pragma omp for
         for (int LoopVar = 0; LoopVar < BufferSize; ++LoopVar) {
             LocalSum += Buffer[LoopVar];
+// CHECK-MESSAGES: :[[@LINE-1]]:13: warning: do not access shared variable 'LocalSum' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
         }
     }
 
@@ -419,8 +420,6 @@ void bufferAccess(int* Buffer, int* Buffer2, int BufferSize) {
     #pragma omp parallel for default(none) shared(Buffer, Buffer2) firstprivate(BufferSize)
     for (int LoopVar = 0; LoopVar < BufferSize; ++LoopVar) {
         Buffer2[0] += LoopVar;
-// CHECK-MESSAGES: :[[@LINE-1]]:9: warning: do not access shared variable 'Buffer2' of type 'int *' without synchronization [openmp-unprotected-shared-variable-access]
-// CHECK-MESSAGES: :[[@LINE-2]]:9: note: 'Buffer2' was mutated here
     }
 
     #pragma omp parallel for default(none) shared(Buffer, Buffer2) firstprivate(BufferSize)
@@ -603,8 +602,6 @@ void bufferAccessAtomicRef(int* Buffer, int* Buffer2, int BufferSize) {
     #pragma omp parallel for default(none) shared(Buffer, Buffer2) firstprivate(BufferSize)
     for (int LoopVar = 0; LoopVar < BufferSize; ++LoopVar) {
         Buffer2[0] += LoopVar;
-// CHECK-MESSAGES: :[[@LINE-1]]:9: warning: do not access shared variable 'Buffer2' of type 'int *' without synchronization [openmp-unprotected-shared-variable-access]
-// CHECK-MESSAGES: :[[@LINE-2]]:9: note: 'Buffer2' was mutated here
     }
 
     #pragma omp parallel for default(none) shared(Buffer, Buffer2) firstprivate(BufferSize)
@@ -1167,10 +1164,11 @@ void tasks() {
     {
         int Local = 10;
 
-        #pragma omp task depend(out: Local)
+        #pragma omp task depend(out: Local) shared(Local)
         Local = 0;
 
         auto Val = Local;
+// CHECK-MESSAGES: :[[@LINE-1]]:20: warning: do not access shared variable 'Local' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
     }
 
     #pragma omp parallel

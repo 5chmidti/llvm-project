@@ -140,75 +140,83 @@ public:
 
 class SharedAndPrivateState {
 public:
+  enum class State {
+    Private,
+    Shared,
+  };
+
   void add(const OMPExecutableDirective *const Directive) {
     const auto Shared = getSharedVariables(Directive);
+    const auto Private = getPrivatizedVariables(Directive);
+
+    ChangedVars.push_back({});
+
+    if (Shared.empty() && Private.empty())
+      return;
+
     for (const ValueDecl *SharedVar : Shared) {
-      auto *const Iter = llvm::find_if(CurrentSharedVars,
-                                       [SharedVar](const auto &VarAndCount) {
-                                         return VarAndCount.first == SharedVar;
-                                       });
-      if (Iter != CurrentSharedVars.end())
-        ++Iter->second;
-      else {
-        CurrentSharedVars.emplace_back(SharedVar, 1U);
-        AllTimeSharedVars.insert(SharedVar);
-      }
+      Vars[SharedVar].push(State::Shared);
+      ChangedVars.back().insert(SharedVar);
     }
 
-    llvm::SmallVector<std::pair<const ValueDecl *, size_t>> PrivatizedVariables;
-
-    for (const ValueDecl *PrivateVar : getPrivatizedVariables(Directive)) {
-      auto *const Iter = llvm::find_if(CurrentSharedVars,
-                                       [PrivateVar](const auto &VarAndCount) {
-                                         return VarAndCount.first == PrivateVar;
-                                       });
-      if (Iter != CurrentSharedVars.end()) {
-        PrivatizedVariables.push_back(*Iter);
-        CurrentSharedVars.erase(Iter);
-        AllTimeSharedVars.erase(Iter->first);
-      }
+    for (const ValueDecl *PrivateVar : Private) {
+      Vars[PrivateVar].push(State::Private);
+      ChangedVars.back().insert(PrivateVar);
     }
+  }
 
-    SharedVarsStack.push_back(Shared);
-    PrivatizedVarsStack.push_back(PrivatizedVariables);
+  void addGlobal(const VarDecl *const Global) {
+    Vars[Global].push(State::Shared);
   }
 
   void pop() {
-    CurrentSharedVars.append(PrivatizedVarsStack.back());
-    PrivatizedVarsStack.pop_back();
-    const llvm::SmallPtrSet<const ValueDecl *, 4> &LatestSharedScopeChange =
-        SharedVarsStack.back();
-    for (const ValueDecl *const SharedVar : LatestSharedScopeChange) {
-      auto *const Iter = llvm::find_if(CurrentSharedVars,
-                                       [SharedVar](const auto &VarAndCount) {
-                                         return VarAndCount.first == SharedVar;
-                                       });
-      if (Iter != CurrentSharedVars.end()) {
-        --Iter->second;
-        if (Iter->second == 0)
-          CurrentSharedVars.erase(Iter);
-      }
-    }
-    SharedVarsStack.pop_back();
+    if (ChangedVars.empty())
+      return;
+
+    for (const ValueDecl *const Changed : ChangedVars.back())
+      Vars[Changed].pop();
+
+    ChangedVars.pop_back();
   }
 
-  bool isShared(const ValueDecl *Var) const {
-    return llvm::find_if(CurrentSharedVars,
-                         [Var](const auto &SharedVarWithCount) {
-                           return SharedVarWithCount.first == Var;
-                         }) != CurrentSharedVars.end();
+  bool is(const ValueDecl *Var, const State S) const {
+    const auto Iter = Vars.find(Var);
+    if (Iter == Vars.end())
+      return false;
+
+    return Iter->second.is(S);
   }
 
-  bool wasAtSomePointShared(const ValueDecl *Var) const {
-    return AllTimeSharedVars.contains(Var);
+  bool was(const ValueDecl *Var, const State S) const {
+    const auto Iter = Vars.find(Var);
+    if (Iter == Vars.end())
+      return false;
+
+    return Iter->second.was(S);
+  }
+
+  bool isUnknown(const ValueDecl *Var) const {
+    const auto Iter = Vars.find(Var);
+    if (Iter == Vars.end())
+      return true;
+
+    return Iter->second.isUnknown();
   }
 
 private:
-  llvm::SmallVector<std::pair<const ValueDecl *, size_t>> CurrentSharedVars;
-  llvm::SmallPtrSet<const ValueDecl *, 4> AllTimeSharedVars;
-  llvm::SmallVector<llvm::SmallPtrSet<const ValueDecl *, 4>> SharedVarsStack;
-  llvm::SmallVector<llvm::SmallVector<std::pair<const ValueDecl *, size_t>>>
-      PrivatizedVarsStack;
+  class StateInfo {
+  public:
+    void push(const State S) { State.push_back(S); }
+    void pop() { State.pop_back(); }
+
+    bool is(const State S) const { return !State.empty() && State.back() == S; }
+    bool was(const State S) const { return llvm::is_contained(State, S); }
+    bool isUnknown() const { return State.empty(); }
+    llvm::SmallVector<State> State;
+  };
+
+  std::map<const ValueDecl *, StateInfo> Vars;
+  std::vector<llvm::SmallPtrSet<const ValueDecl *, 4>> ChangedVars;
 };
 
 class ReductionState {
@@ -226,7 +234,8 @@ public:
   }
 
   void pop() {
-    llvm::set_difference(CurrentReductionVariables, ReductionVarsStack.back());
+    CurrentReductionVariables = llvm::set_difference(CurrentReductionVariables,
+                                                     ReductionVarsStack.back());
     ReductionVarsStack.pop_back();
   }
 
@@ -324,6 +333,15 @@ public:
   };
 
   bool TraverseOMPExecutableDirective(OMPExecutableDirective *Directive) {
+    const bool IsParallelDirective = isOpenMPDirectiveKind(
+        Directive->getDirectiveKind(), llvm::omp::Directive::OMPD_parallel,
+        llvm::omp::Directive::OMPD_target);
+    if (IsParallelDirective)
+      ++ParallelContextDepth;
+
+    if (ParallelContextDepth == 0)
+      return true;
+
     if (Directive->isStandaloneDirective()) {
       if (const auto *const Barrier =
               llvm::dyn_cast<OMPBarrierDirective>(Directive))
@@ -349,26 +367,48 @@ public:
         saveAnalysisAndStartNewEpoch();
     }
 
+    if (IsParallelDirective)
+      --ParallelContextDepth;
+
     return true;
+  }
+
+  bool TraverseVarDecl(VarDecl *V) {
+    if (V->hasGlobalStorage())
+      State.SharedAndPrivateVars.addGlobal(V);
+
+    return Base::TraverseVarDecl(V);
   }
 
   bool TraverseCapturedStmt(CapturedStmt *S) { return true; }
 
   bool TraverseDeclRefExpr(DeclRefExpr *DRef) {
+    if (ParallelContextDepth == 0)
+      return true;
+
     const ValueDecl *Var = DRef->getDecl();
-    const bool IsShared = State.SharedAndPrivateVars.isShared(Var);
+    const bool IsShared = State.SharedAndPrivateVars.is(
+        Var, SharedAndPrivateState::State::Shared);
     const bool WasAtSomePointDependent =
         State.DependentVars.wasAtSomePointDependent(Var);
-    const bool WasAtSomePointShared =
-        State.SharedAndPrivateVars.wasAtSomePointShared(Var);
+    const bool WasAtSomePointShared = State.SharedAndPrivateVars.was(
+        Var, SharedAndPrivateState::State::Shared);
+    const bool IsPrivate = State.SharedAndPrivateVars.is(
+        Var, SharedAndPrivateState::State::Private);
+    const bool IsUnknown = State.SharedAndPrivateVars.isUnknown(Var);
     const auto *const Variable = llvm::dyn_cast<VarDecl>(Var);
     const bool Global = Variable && Variable->hasGlobalStorage();
     const bool IsMapped = State.Target.isMapped(Var);
-    if ((!IsShared && !WasAtSomePointDependent && !WasAtSomePointShared &&
-         !Global && !IsMapped) ||
-        isOMPLockType(Var->getType()) ||
-        (WasAtSomePointDependent && !WasAtSomePointShared))
+    if (!IsUnknown &&
+        ((!IsShared && !WasAtSomePointDependent && !WasAtSomePointShared &&
+          !Global && !IsMapped) ||
+         (!WasAtSomePointShared &&
+          !WasAtSomePointDependent) || // FIXME: currently dependent?
+         isOMPLockType(Var->getType()) ||
+         IsPrivate
+         )) {
       return true;
+    }
 
     const bool IsReductionVariable = State.Reductions.isReductionVar(Var);
     const bool IsThreadLocal = Variable && Variable->getStorageDuration() ==
@@ -409,9 +449,17 @@ public:
     return true;
   }
 
-  bool TraverseFunctionDecl(FunctionDecl *const) { return true; }
+  bool TraverseFunctionDecl(FunctionDecl *const FD) {
+    if (ParallelContextDepth == 0)
+      return Base::TraverseFunctionDecl(FD);
+
+    return true;
+  }
 
   bool TraverseCallExpr(CallExpr *const CE) {
+    if (ParallelContextDepth == 0)
+      return true;
+
     for (Expr *const Arg : CE->arguments())
       Base::TraverseStmt(Arg);
     const auto *const FDecl =
@@ -436,6 +484,9 @@ public:
   }
 
   bool TraverseCXXOperatorCallExpr(CXXOperatorCallExpr *const CE) {
+    if (ParallelContextDepth == 0)
+      return true;
+
     for (Expr *const Arg : CE->arguments())
       Base::TraverseStmt(Arg);
     const auto *const FDecl =
@@ -469,11 +520,6 @@ public:
         qualType(matchers::matchesAnyListedTypeName(ThreadSafeTypes)),
         hasCanonicalType(matchers::matchesAnyListedTypeName(ThreadSafeTypes))));
 
-    const auto CollidingIndex =
-        expr(anyOf(declRefExpr(to(varDecl(
-                       anyOf(isConstexpr(), hasType(isConstQualified()))))),
-                   constantExpr(), integerLiteral()));
-
     const auto IsCastToRValueOrConst = traverse(
         TK_AsIs,
         expr(hasParent(implicitCastExpr(
@@ -489,25 +535,25 @@ public:
         ));
 
     const bool ShouldBeDiagnosed =
-        !match(traverse(
-                   TK_IgnoreUnlessSpelledInSource,
-                   declRefExpr(
-                       Var, unless(hasType(ThreadSafeType)),
-                       unless(hasParent(expr(anyOf(
-                           arraySubscriptExpr(
-                               unless(allOf(hasIndex(CollidingIndex),
-                                            unless(hasType(ThreadSafeType))))),
-                           cxxOperatorCallExpr(hasOverloadedOperatorName("[]"),
-                                               hasArgument(0, Var)),
-                           unaryOperator(hasOperatorName("&"),
-                                         hasUnaryOperand(Var),
-                                         hasParent(AtomicIntrinsicCall)),
-                           callExpr(
-                               callee(namedDecl(matchers::matchesAnyListedName(
-                                   ThreadSafeFunctions)))),
-                           IsCastToRValueOrConst, AtomicIntrinsicCall)))))
-                       .bind("dref")),
-               *DRef, Ctx)
+        !match(
+             traverse(
+                 TK_IgnoreUnlessSpelledInSource,
+                 declRefExpr(
+                     Var.bind("var"), unless(hasType(ThreadSafeType)),
+                     unless(hasParent(expr(anyOf(
+                         arraySubscriptExpr(),
+                         cxxOperatorCallExpr(
+                             hasOverloadedOperatorName("[]"),
+                             hasArgument(0, equalsBoundNode("var"))),
+                         unaryOperator(hasOperatorName("&"),
+                                       hasUnaryOperand(equalsBoundNode("var")),
+                                       hasParent(AtomicIntrinsicCall)),
+                         callExpr(
+                             callee(namedDecl(matchers::matchesAnyListedName(
+                                 ThreadSafeFunctions)))),
+                         IsCastToRValueOrConst, AtomicIntrinsicCall)))))
+                     .bind("dref")),
+             *DRef, Ctx)
              .empty();
 
     if (!ShouldBeDiagnosed)
@@ -588,6 +634,8 @@ private:
   // expressions don't have their own AST node
   size_t LockedRegionCount = 0;
 
+  size_t ParallelContextDepth = 0;
+
   VariableState State;
   ASTContext &Ctx;
   const llvm::ArrayRef<llvm::StringRef> ThreadSafeTypes;
@@ -600,24 +648,17 @@ const auto DefaultThreadSafeFunctions = "";
 
 void UnprotectedSharedVariableAccessCheck::registerMatchers(
     MatchFinder *Finder) {
-  Finder->addMatcher(
-      ompExecutableDirective(
-          anyOf(isOMPParallelDirective(), isOMPTargetDirective()),
-          unless(isStandaloneDirective()),
-          unless(hasAncestor(ompExecutableDirective())))
-          .bind("directive"),
-      this);
+  Finder->addMatcher(translationUnitDecl().bind("TU"), this);
 }
 
 void UnprotectedSharedVariableAccessCheck::check(
     const MatchFinder::MatchResult &Result) {
   ASTContext &Ctx = *Result.Context;
 
-  const auto *const Directive =
-      Result.Nodes.getNodeAs<OMPExecutableDirective>("directive");
+  const auto *const TU = Result.Nodes.getNodeAs<TranslationUnitDecl>("TU");
 
   Visitor V(Ctx, ThreadSafeTypes, ThreadSafeFunctions);
-  V.TraverseStmt(const_cast<OMPExecutableDirective *>(Directive));
+  V.TraverseTranslationUnitDecl(const_cast<TranslationUnitDecl *>(TU));
   for (const auto &[SharedVar, Res] : V.takeResults()) {
     const auto &[Mutations, UnprotectedAcesses, UnprotectedDependentAccesses] =
         Res;
