@@ -143,6 +143,7 @@ public:
   enum class State {
     Private,
     Shared,
+    InnerLocal,
   };
 
   void add(const OMPExecutableDirective *const Directive) {
@@ -167,6 +168,10 @@ public:
 
   void addGlobal(const VarDecl *const Global) {
     Vars[Global].push(State::Shared);
+  }
+
+  void addInnerLocal(const VarDecl *const Global) {
+    Vars[Global].push(State::InnerLocal);
   }
 
   void pop() {
@@ -206,13 +211,21 @@ public:
 private:
   class StateInfo {
   public:
-    void push(const State S) { State.push_back(S); }
-    void pop() { State.pop_back(); }
+    void push(const State S) {
+      CurrentState.push_back(S);
+      AllTime.insert(S);
+    }
+    void pop() { CurrentState.pop_back(); }
 
-    bool is(const State S) const { return !State.empty() && State.back() == S; }
-    bool was(const State S) const { return llvm::is_contained(State, S); }
-    bool isUnknown() const { return State.empty(); }
-    llvm::SmallVector<State> State;
+    bool is(const State S) const {
+      return !CurrentState.empty() && CurrentState.back() == S;
+    }
+    bool was(const State S) const { return AllTime.contains(S); }
+    bool isUnknown() const { return CurrentState.empty(); }
+
+  private:
+    llvm::SmallVector<State> CurrentState;
+    llvm::SmallSet<State, 3> AllTime;
   };
 
   std::map<const ValueDecl *, StateInfo> Vars;
@@ -376,6 +389,9 @@ public:
   bool TraverseVarDecl(VarDecl *V) {
     if (V->hasGlobalStorage())
       State.SharedAndPrivateVars.addGlobal(V);
+
+    if (ParallelContextDepth != 0)
+      State.SharedAndPrivateVars.addInnerLocal(V);
 
     return Base::TraverseVarDecl(V);
   }

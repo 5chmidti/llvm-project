@@ -182,7 +182,6 @@ void var(int* Buffer, int BufferSize) {
         #pragma omp for
         for (int LoopVar = 0; LoopVar < BufferSize; ++LoopVar) {
             LocalSum += Buffer[LoopVar];
-// CHECK-MESSAGES: :[[@LINE-1]]:13: warning: do not access shared variable 'LocalSum' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
         }
     }
 
@@ -1107,6 +1106,15 @@ void tasks() {
         #pragma omp task
             Sum = 1;
 // CHECK-MESSAGES: :[[@LINE-1]]:13: warning: do not access shared variable 'Sum' of type 'int' without synchronization; specify synchronization on the task with `depend` [openmp-unprotected-shared-variable-access]
+    }
+
+    #pragma omp parallel sections
+    {
+    #pragma omp section
+        {
+            int Local = 0;
+            Local = 0;
+        }
     }
 
     #pragma omp parallel
