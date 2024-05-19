@@ -403,6 +403,10 @@ public:
       return true;
 
     const ValueDecl *Var = DRef->getDecl();
+
+    if (isOMPLockType(Var->getType()))
+      return true;
+
     const bool IsShared = State.SharedAndPrivateVars.is(
         Var, SharedAndPrivateState::State::Shared);
     const bool WasAtSomePointDependent =
@@ -420,7 +424,6 @@ public:
           !Global && !IsMapped) ||
          (!WasAtSomePointShared &&
           !WasAtSomePointDependent) || // FIXME: currently dependent?
-         isOMPLockType(Var->getType()) ||
          IsPrivate
          )) {
       return true;
