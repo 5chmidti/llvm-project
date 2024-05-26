@@ -63,3 +63,13 @@ void Parallel(){
     #pragma omp parallel
         { }
 }
+
+int PArallelForWithAutoSchedyle(int*Buffer, int N){
+    int Sum = 0;
+// CHECK-MESSAGES: :[[@LINE+1]]:5: warning: the 'auto' scheduling kind results in an implementation defined schedule, which may not fit the work distribution across iterations [openmp-specify-schedule]
+    #pragma omp parallel for simd schedule(auto) default(none) firstprivate(N) shared(Buffer) reduction(+:Sum)
+    for (int I = 0; I < N; ++I) {
+        Sum += Buffer[I];
+    }
+    return Sum;
+}

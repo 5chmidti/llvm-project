@@ -7,10 +7,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "SpecifyScheduleCheck.h"
+#include "../utils/OpenMP.h"
 #include "clang/AST/OpenMPClause.h"
 #include "clang/AST/StmtOpenMP.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 #include "clang/ASTMatchers/ASTMatchers.h"
+#include "clang/ASTMatchers/ASTMatchersMacros.h"
 #include "clang/Basic/OpenMPKinds.h"
 #include "llvm/Frontend/OpenMP/OMP.h.inc"
 
@@ -19,35 +21,59 @@ using namespace clang::ast_matchers;
 namespace clang::tidy::openmp {
 namespace {
 // NOLINTBEGIN(readability-identifier-naming)
-const internal::VariadicDynCastAllOfMatcher<Stmt, OMPForDirective>
+const ast_matchers::internal::VariadicDynCastAllOfMatcher<Stmt, OMPForDirective>
     ompForDirective;
-const internal::VariadicDynCastAllOfMatcher<Stmt, OMPParallelForDirective>
+const ast_matchers::internal::VariadicDynCastAllOfMatcher<
+    Stmt, OMPParallelForDirective>
     ompParallelForDirective;
-const internal::VariadicDynCastAllOfMatcher<Stmt, OMPParallelForSimdDirective>
+const ast_matchers::internal::VariadicDynCastAllOfMatcher<
+    Stmt, OMPParallelForSimdDirective>
     ompParallelForSimdDirective;
-const internal::VariadicDynCastAllOfMatcher<OMPClause, OMPScheduleClause>
+const ast_matchers::internal::VariadicDynCastAllOfMatcher<OMPClause,
+                                                          OMPScheduleClause>
     ompScheduleClause;
+
+AST_MATCHER(OMPExecutableDirective, isOMPForDirective) {
+  return isOpenMPDirectiveKind(Node.getDirectiveKind(),
+                               OpenMPDirectiveKind::OMPD_for);
+}
+
+AST_MATCHER(OMPScheduleClause, isAutoKind) {
+  return Node.getScheduleKind() == OpenMPScheduleClauseKind::OMPC_SCHEDULE_auto;
+}
 // NOLINTEND(readability-identifier-naming)
 } // namespace
 
 void SpecifyScheduleCheck::registerMatchers(MatchFinder *Finder) {
-  Finder->addMatcher(mapAnyOf(ompForDirective, ompParallelForDirective,
-                              ompParallelForSimdDirective)
-                         .with(unless(hasAnyClause(ompScheduleClause())))
-                         .bind("directive"),
-                     this);
+  Finder->addMatcher(
+      ompExecutableDirective(
+          isOMPForDirective(),
+          anyOf(unless(ast_matchers::hasAnyClause(ompScheduleClause())),
+                ast_matchers::hasAnyClause(
+                    ompScheduleClause(isAutoKind()).bind("auto-schedule"))))
+          .bind("directive"),
+      this);
 }
 
 void SpecifyScheduleCheck::check(const MatchFinder::MatchResult &Result) {
   const auto *Directive =
       Result.Nodes.getNodeAs<OMPExecutableDirective>("directive");
+
+  if (Result.Nodes.getNodeAs<OMPScheduleClause>("auto-schedule")) {
+    diag(Directive->getBeginLoc(),
+         "the 'auto' scheduling kind results in an implementation defined "
+         "schedule, which may not fit the work distribution across iterations")
+        << Directive->getSourceRange()
+        << llvm::omp::getOpenMPDirectiveName(Directive->getDirectiveKind());
+    return;
+  }
+
   diag(Directive->getBeginLoc(),
        "specify the schedule for this OpenMP '%0' "
        "directive to fit the work distribution across iterations, "
        "the default is implementation defined")
-      << Directive->getSourceRange() <<
-      // Directive->getStmtClassName()
-      llvm::omp::getOpenMPDirectiveName(Directive->getDirectiveKind());
+      << Directive->getSourceRange()
+      << llvm::omp::getOpenMPDirectiveName(Directive->getDirectiveKind());
 }
 
 } // namespace clang::tidy::openmp
