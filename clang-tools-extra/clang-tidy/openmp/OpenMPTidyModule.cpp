@@ -19,6 +19,7 @@
 #include "SpecifyScheduleCheck.h"
 #include "UnprotectedSharedVariableAccessCheck.h"
 #include "UseDefaultNoneCheck.h"
+#include "UseReductionCheck.h"
 
 namespace clang::tidy {
 namespace openmp {
@@ -49,6 +50,8 @@ public:
         "openmp-unprotected-shared-variable-access");
     CheckFactories.registerCheck<UseDefaultNoneCheck>(
         "openmp-use-default-none");
+    CheckFactories.registerCheck<UseReductionCheck>(
+        "openmp-use-reduction");
   }
 };
 

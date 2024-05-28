@@ -160,6 +160,11 @@ New checks
 
   Finds unprotected accesses to shared variables.
 
+- New :doc:`openmp-use-reduction
+  <clang-tidy/checks/openmp/use-reduction>` check.
+
+  FIXME: add release notes.
+
 - New :doc:`readability-use-std-min-max
   <clang-tidy/checks/readability/use-std-min-max>` check.
 

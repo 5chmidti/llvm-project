@@ -15,6 +15,7 @@ add_clang_library(clangTidyOpenMPModule
   SpecifyScheduleCheck.cpp
   UnprotectedSharedVariableAccessCheck.cpp
   UseDefaultNoneCheck.cpp
+  UseReductionCheck.cpp
 
   LINK_LIBS
   clangTidy

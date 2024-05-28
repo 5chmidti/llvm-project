@@ -324,6 +324,7 @@ Clang-Tidy Checks
    :doc:`openmp-specify-schedule <openmp/specify-schedule>`,
    :doc:`openmp-unprotected-shared-variable-access <openmp/unprotected-shared-variable-access>`,
    :doc:`openmp-use-default-none <openmp/use-default-none>`,
+   :doc:`openmp-use-reduction <openmp/use-reduction>`,
    :doc:`performance-avoid-endl <performance/avoid-endl>`, "Yes"
    :doc:`performance-enum-size <performance/enum-size>`,
    :doc:`performance-faster-string-find <performance/faster-string-find>`, "Yes"
