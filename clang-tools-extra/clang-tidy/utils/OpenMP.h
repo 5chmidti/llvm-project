@@ -26,9 +26,11 @@ class ValueDecl;
 } // namespace clang
 
 namespace clang::tidy::openmp {
+// NOLINTBEGIN(readability-identifier-naming)
 extern const ast_matchers::internal::VariadicDynCastAllOfMatcher<
     OMPClause, OMPReductionClause>
     ompReductionClause;
+
 extern const ast_matchers::internal::VariadicDynCastAllOfMatcher<
     OMPClause, OMPTaskReductionClause>
     ompTaskReductionClause;
@@ -38,6 +40,35 @@ extern const ast_matchers::internal::MapAnyOfMatcherImpl<
     OMPLinearClause, OMPReductionClause, OMPTaskReductionClause,
     OMPInReductionClause>
     ompPrivatizationClause;
+
+const ast_matchers::internal::MapAnyOfMatcher<
+    OMPCriticalDirective, OMPAtomicDirective, OMPOrderedDirective,
+    OMPSingleDirective> // FIXME: single is not protected, what about ordered?
+                        // how to fit masked into this?
+    ompProtectedAccessDirective;
+
+const ast_matchers::internal::VariadicDynCastAllOfMatcher<Stmt,
+                                                          OMPTaskDirective>
+    ompTaskDirective;
+const ast_matchers::internal::VariadicDynCastAllOfMatcher<Stmt,
+                                                          OMPAtomicDirective>
+    ompAtomicDirective;
+const ast_matchers::internal::VariadicDynCastAllOfMatcher<Stmt,
+                                                          OMPCriticalDirective>
+    ompCriticalDirective;
+// NOLINTEND(readability-identifier-naming)
+
+AST_MATCHER(CallExpr, isCallingAtomicBuiltin) {
+  switch (Node.getBuiltinCallee()) {
+#define BUILTIN(ID, TYPE, ATTRS)
+#define ATOMIC_BUILTIN(ID, TYPE, ATTRS)                                        \
+  case Builtin::BI##ID:                                                        \
+    return true;
+#include "clang/Basic/Builtins.inc"
+  default:
+    return false;
+  }
+}
 
 AST_POLYMORPHIC_MATCHER_P(
     reducesVariable,

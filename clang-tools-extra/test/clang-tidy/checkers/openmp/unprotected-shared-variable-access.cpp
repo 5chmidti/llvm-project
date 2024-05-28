@@ -1272,7 +1272,6 @@ void target() {
     {
         omp_set_lock(&l);
         Sum = 0;
-// CHECK-MESSAGES: :[[@LINE-1]]:9: warning: do not access shared variable 'Sum' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
         omp_unset_lock(&l);
     }
 

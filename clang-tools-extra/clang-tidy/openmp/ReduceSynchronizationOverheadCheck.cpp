@@ -34,12 +34,6 @@ namespace {
 const ast_matchers::internal::VariadicDynCastAllOfMatcher<
     Stmt, CompoundAssignOperator>
     compoundAssignOperator;
-const ast_matchers::internal::VariadicDynCastAllOfMatcher<Stmt,
-                                                          OMPCriticalDirective>
-    ompCriticalDirective;
-const ast_matchers::internal::VariadicDynCastAllOfMatcher<Stmt,
-                                                          OMPAtomicDirective>
-    ompAtomicDirective;
 const ast_matchers::internal::VariadicDynCastAllOfMatcher<OMPClause,
                                                           OMPSharedClause>
     ompSharedClause;
@@ -305,11 +299,6 @@ auto atomicOperation() {
 }
 
 auto atomicMatch() {
-  // optionally(,
-  //     optionally(ompExecutableDirective(
-  //         isOpenMPParallelDirective(),
-  //         hasSharedVariable(declRefExpr(to(equalsBoundNode("x")))))))
-
   return stmt(anyOf(atomicOperation(),
                     compoundStmt(hasSingleStatement(), has(atomicOperation()))
                         .bind("extra-compound")),

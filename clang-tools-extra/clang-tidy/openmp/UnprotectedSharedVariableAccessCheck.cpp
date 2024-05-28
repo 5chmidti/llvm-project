@@ -44,37 +44,6 @@ using namespace clang::ast_matchers;
 
 namespace clang::tidy::openmp {
 namespace {
-// NOLINTBEGIN(readability-identifier-naming)
-const ast_matchers::internal::MapAnyOfMatcher<
-    OMPCriticalDirective, OMPAtomicDirective, OMPOrderedDirective,
-    OMPSingleDirective>
-    ompProtectedAccessDirective;
-
-const ast_matchers::internal::VariadicDynCastAllOfMatcher<Stmt,
-                                                          OMPTaskDirective>
-    ompTaskDirective;
-// NOLINTEND(readability-identifier-naming)
-
-AST_MATCHER(CallExpr, isCallingAtomicBuiltin) {
-  switch (Node.getBuiltinCallee()) {
-#define BUILTIN(ID, TYPE, ATTRS)
-#define ATOMIC_BUILTIN(ID, TYPE, ATTRS)                                        \
-  case Builtin::BI##ID:                                                        \
-    return true;
-#include "clang/Basic/Builtins.inc"
-  default:
-    return false;
-  }
-}
-
-AST_MATCHER(OMPExecutableDirective, isOMPParallelDirective) {
-  return isOpenMPParallelDirective(Node.getDirectiveKind());
-}
-
-AST_MATCHER(OMPExecutableDirective, isOMPTargetDirective) {
-  return isOpenMPTargetExecutionDirective(Node.getDirectiveKind());
-}
-
 bool isOMPLockType(const QualType &QType) {
   if (QType.isNull())
     return false;
@@ -437,9 +406,7 @@ public:
       // FIXME: can use traversal to know if there is an ancestor
       const auto MatchResult =
           match(declRefExpr(hasAncestor(ompExecutableDirective(
-                    anyOf((IsInTeamsDirective ? ompAtomicDirective()
-                                              : ompProtectedAccessDirective())
-                              .bind("protected"),
+                    anyOf(ompProtectedAccessDirective().bind("protected"),
                           ompTaskDirective())))),
                 *DRef, Ctx);
       IsProtected =
