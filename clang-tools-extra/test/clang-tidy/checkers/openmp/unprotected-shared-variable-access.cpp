@@ -40,6 +40,8 @@ void omp_init_lock(omp_lock_t*);
 void omp_set_lock(omp_lock_t*);
 void omp_unset_lock(omp_lock_t*);
 
+int omp_get_thread_num();
+
 struct StaticStorage {
     static int StaticMember;
     static int StaticThreadPrivate;
@@ -334,6 +336,35 @@ void var(int* Buffer, int BufferSize) {
     for (i = 0; i < BufferSize; ++i)
         for (j = 0; j < BufferSize; ++j)
             ;
+
+    #pragma omp parallel
+    {
+        Sum = 0;
+// CHECK-MESSAGES: :[[@LINE-1]]:9: warning: do not access shared variable 'Sum' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
+    }
+
+    #pragma omp parallel
+    {
+        if (0 == omp_get_thread_num())
+            Sum = 0;
+    }
+
+    #pragma omp parallel
+    {
+        const auto ThreadID = omp_get_thread_num();
+        if (0 == ThreadID)
+            Sum = 0;
+    }
+
+    #pragma omp parallel
+    {
+        const auto ThreadID = omp_get_thread_num();
+        if (0 != ThreadID)
+            Sum = 0;
+// CHECK-MESSAGES: :[[@LINE-1]]:13: warning: do not access shared variable 'Sum' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
+        else
+            Sum = 1;
+    }
 }
 
 void varAtomic(int* Buffer, int BufferSize) {

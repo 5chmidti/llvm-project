@@ -409,15 +409,38 @@ public:
     const bool IsReductionVariable = State.Reductions.isReductionVar(Var);
     bool IsProtected = LockedRegionCount > 0 || IsReductionVariable;
     if (!IsProtected) {
+      const auto GetThreadNum =
+          callExpr(callee(functionDecl(hasName("::omp_get_thread_num"))));
+      const auto ThreadNum =
+          expr(anyOf(declRefExpr(to(varDecl(
+                         hasType(qualType(isConstQualified(), isInteger())),
+                         hasInitializer(GetThreadNum)))),
+                     GetThreadNum));
+      const auto TrueIf =
+          ifStmt(hasCondition(binaryOperator(hasOperatorName("=="),
+                                             hasEitherOperand(ThreadNum))
+                                  .bind("thread-num-cmp")),
+                 hasThen(hasDescendant(declRefExpr(equalsBoundNode("dref")))));
+      const auto FalseIf =
+          ifStmt(hasCondition(binaryOperator(hasOperatorName("!="),
+                                             hasEitherOperand(ThreadNum))
+                                  .bind("thread-num-cmp")),
+                 hasElse(hasDescendant(declRefExpr(equalsBoundNode("dref")))));
       // FIXME: can use traversal to know if there is an ancestor
-      const auto MatchResult =
-          match(declRefExpr(hasAncestor(ompExecutableDirective(
-                    anyOf(ompProtectedAccessDirective().bind("protected"),
-                          ompTaskDirective())))),
-                *DRef, Ctx);
+      const auto MatchResult = match(
+          traverse(
+              TK_IgnoreUnlessSpelledInSource,
+              declRefExpr(
+                  declRefExpr().bind("dref"),
+                  anyOf(hasAncestor(ifStmt(anyOf(TrueIf, FalseIf))),
+                        hasAncestor(ompExecutableDirective(anyOf(
+                            ompProtectedAccessDirective().bind("protected"),
+                            ompTaskDirective())))))),
+          *DRef, Ctx);
       IsProtected =
           !MatchResult.empty() &&
-          MatchResult[0].getNodeAs<OMPExecutableDirective>("protected");
+          (MatchResult[0].getNodeAs<OMPExecutableDirective>("protected") ||
+           MatchResult[0].getNodeAs<BinaryOperator>("thread-num-cmp"));
     }
 
     const bool IsDependent = State.DependentVars.isDependent(Var);
