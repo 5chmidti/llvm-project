@@ -16,7 +16,7 @@
 #include "ExceptionEscapeCheck.h"
 #include "MissingForInParallelDirectiveBeforeForLoopCheck.h"
 #include "MissingOrderedDirectiveAfterOrderedClauseCheck.h"
-#include "ReduceSynchronizationOverheadCheck.h"
+#include "UseAtomicInsteadOfCriticalCheck.h"
 #include "SpecifyScheduleCheck.h"
 #include "UnprotectedSharedVariableAccessCheck.h"
 #include "UseDefaultNoneCheck.h"
@@ -46,8 +46,8 @@ public:
             "openmp-missing-for-in-parallel-directive-before-for-loop");
     CheckFactories.registerCheck<MissingOrderedDirectiveAfterOrderedClauseCheck>(
         "openmp-missing-ordered-directive-after-ordered-clause");
-    CheckFactories.registerCheck<ReduceSynchronizationOverheadCheck>(
-        "openmp-reduce-synchronization-overhead");
+    CheckFactories.registerCheck<UseAtomicInsteadOfCriticalCheck>(
+        "openmp-use-atomic-instead-of-critical");
     CheckFactories.registerCheck<SpecifyScheduleCheck>(
         "openmp-specify-schedule");
     CheckFactories.registerCheck<UnprotectedSharedVariableAccessCheck>(
