@@ -24,6 +24,8 @@ namespace std {
     };
 } // namespace std
 
+void modifyParm(int Parm) { Parm = 0; }
+
 void doesMutate(int&);
 void doesMutate(int*);
 void doesMutate(std::atomic<int>&);
@@ -364,6 +366,29 @@ void var(int* Buffer, int BufferSize) {
 // CHECK-MESSAGES: :[[@LINE-1]]:13: warning: do not access shared variable 'Sum' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
         else
             Sum = 1;
+    }
+
+    #pragma omp parallel
+        modifyParm(0);
+}
+
+int G = 0;
+void modifyG() { G = 0; }
+void modifyGlobalVar() {
+    #pragma omp parallel
+    {
+        modifyG();
+// CHECK-MESSAGES: :[[@LINE-5]]:18: warning: do not access shared variable 'G' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
+    }
+
+    #pragma omp parallel default(none)
+    {
+        modifyG();
+    }
+
+    #pragma omp parallel default(none) private(Global)
+    {
+        modifyG();
     }
 }
 

@@ -141,9 +141,11 @@ public:
     Vars[Global].push(State::Shared);
   }
 
-  void addInnerLocal(const VarDecl *const Global) {
-    Vars[Global].push(State::InnerLocal);
+  void addInnerLocal(const VarDecl *const InnerLocal) {
+    Vars[InnerLocal].push(State::InnerLocal);
   }
+
+  void addParm(const VarDecl *const Parm) { Vars[Parm].push(State::Parameter); }
 
   void pop() {
     if (ChangedVars.empty())
@@ -371,6 +373,12 @@ public:
     return Base::TraverseVarDecl(V);
   }
 
+  bool TraverseParmVarDecl(ParmVarDecl *Parm) {
+    State.SharedAndPrivateVars.addParm(Parm);
+
+    return Base::TraverseParmVarDecl(Parm);
+  }
+
   bool TraverseCapturedStmt(CapturedStmt *S) { return true; }
 
   bool TraverseDeclRefExpr(DeclRefExpr *DRef) {
@@ -574,8 +582,12 @@ public:
     if (!ShouldBeDiagnosed)
       return false;
 
-    ExprMutationAnalyzer Analyzer(
-        *State.Directives.DirectiveStack.back()->getStructuredBlock(), Ctx);
+    const Stmt *EntryPoint =
+        CallStack.empty()
+            ? State.Directives.DirectiveStack.back()->getStructuredBlock()
+            : CallStack.back()->getBody();
+
+    ExprMutationAnalyzer Analyzer(*EntryPoint, Ctx);
 
     return Analyzer.isMutated(DRef);
   }
@@ -643,7 +655,7 @@ private:
       std::pair<const clang::ValueDecl *, Visitor::AnalysisResult>, 4>
       Results;
 
-  llvm::SmallVector<const Decl *> CallStack;
+  llvm::SmallVector<const FunctionDecl *> CallStack;
 
   // FIXME: support RAII locks, which may mean tracking scopes because destruct
   // expressions don't have their own AST node
