@@ -12,7 +12,7 @@ add_clang_library(clangTidyOpenMPModule
   MissingForInParallelDirectiveBeforeForLoopCheck.cpp
   MissingOrderedDirectiveAfterOrderedClauseCheck.cpp
   OpenMPTidyModule.cpp
-  ReduceSynchronizationOverheadCheck.cpp
+  UseAtomicInsteadOfCriticalCheck.cpp
   SpecifyScheduleCheck.cpp
   UnprotectedSharedVariableAccessCheck.cpp
   UseDefaultNoneCheck.cpp

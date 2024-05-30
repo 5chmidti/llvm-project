@@ -149,8 +149,8 @@ New checks
 
   FIXME: add release notes.
 
-- New :doc:`openmp-reduce-synchronization-overhead
-  <clang-tidy/checks/openmp/reduce-synchronization-overhead>` check.
+- New :doc:`openmp-use-atomic-instead-of-critical
+  <clang-tidy/checks/openmp/use-atomic-instead-of-critical>` check.
 
   Finds OpenMP critical sections that can be replaced with atomic sections.
 

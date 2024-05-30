@@ -1,4 +1,4 @@
-//===--- ReduceSynchronizationOverheadCheck.cpp - clang-tidy --------------===//
+//===--- UseAtomicInsteadOfCriticalCheck.cpp - clang-tidy -----------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "ReduceSynchronizationOverheadCheck.h"
+#include "UseAtomicInsteadOfCriticalCheck.h"
 #include "../utils/OpenMP.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/Decl.h"
@@ -317,14 +317,14 @@ auto unnecessaryAtomic() {
 
 } // namespace
 
-void ReduceSynchronizationOverheadCheck::registerMatchers(MatchFinder *Finder) {
+void UseAtomicInsteadOfCriticalCheck::registerMatchers(MatchFinder *Finder) {
   Finder->addMatcher(ompExecutableDirective(isOpenMPParallelDirective())
                          .bind("parallel-directive"),
                      this);
   Finder->addMatcher(unnecessaryAtomic().bind("unnecessary-atomic"), this);
 }
 
-void ReduceSynchronizationOverheadCheck::check(
+void UseAtomicInsteadOfCriticalCheck::check(
     const MatchFinder::MatchResult &Result) {
   ASTContext &Ctx = *Result.Context;
 

@@ -1,8 +1,8 @@
-// RUN: %check_clang_tidy %s openmp-reduce-synchronization-overhead %t -- -- -fopenmp
+// RUN: %check_clang_tidy %s openmp-use-atomic-instead-of-critical %t -- -- -fopenmp
 
 void foo() {
     int x = 10;
-// CHECK-MESSAGES: :[[@LINE+1]]:5: warning: the accesses to 'x' inside critical sections can be rewritten to use 'omp atomic's for more performance [openmp-reduce-synchronization-overhead]
+// CHECK-MESSAGES: :[[@LINE+1]]:5: warning: the accesses to 'x' inside critical sections can be rewritten to use 'omp atomic's for more performance [openmp-use-atomic-instead-of-critical]
     #pragma omp parallel default(none) shared(x)
     {
 // CHECK-FIXES: #pragma omp atomic write
@@ -21,7 +21,7 @@ void foo() {
             { ++x; }
     }
 
-// CHECK-MESSAGES: :[[@LINE+1]]:5: warning: the accesses to 'x' inside critical sections can be rewritten to use 'omp atomic's for more performance [openmp-reduce-synchronization-overhead]
+// CHECK-MESSAGES: :[[@LINE+1]]:5: warning: the accesses to 'x' inside critical sections can be rewritten to use 'omp atomic's for more performance [openmp-use-atomic-instead-of-critical]
     #pragma omp parallel default(shared)
     {
 // CHECK-FIXES: #pragma omp atomic write
@@ -42,13 +42,13 @@ void foo() {
 
     #pragma omp parallel default(shared) private(x)
     {
-// CHECK-MESSAGES: :[[@LINE+4]]:13: warning: this operation is declared with `omp atomic` but it does not involve a shared variable [openmp-reduce-synchronization-overhead]
+// CHECK-MESSAGES: :[[@LINE+4]]:13: warning: this operation is declared with `omp atomic` but it does not involve a shared variable [openmp-use-atomic-instead-of-critical]
 // CHECK-FIXES: {{^        $}}
 // CHECK-FIXES-NEXT: x = 2;
         #pragma omp atomic write
             x = 2;
 
-// CHECK-MESSAGES: :[[@LINE+4]]:13: warning: this operation is declared with `omp atomic` but it does not involve a shared variable [openmp-reduce-synchronization-overhead]
+// CHECK-MESSAGES: :[[@LINE+4]]:13: warning: this operation is declared with `omp atomic` but it does not involve a shared variable [openmp-use-atomic-instead-of-critical]
 // CHECK-FIXES: {{^        $}}
 // CHECK-FIXES-NEXT: ++x;
         #pragma omp atomic update
@@ -58,7 +58,7 @@ void foo() {
     #pragma omp atomic update
         ++x;
 
-// CHECK-MESSAGES: :[[@LINE+1]]:5: warning: the accesses to 'x' inside critical sections can be rewritten to use 'omp atomic's for more performance [openmp-reduce-synchronization-overhead]
+// CHECK-MESSAGES: :[[@LINE+1]]:5: warning: the accesses to 'x' inside critical sections can be rewritten to use 'omp atomic's for more performance [openmp-use-atomic-instead-of-critical]
     #pragma omp parallel
     {
 // CHECK-FIXES: #pragma omp atomic write

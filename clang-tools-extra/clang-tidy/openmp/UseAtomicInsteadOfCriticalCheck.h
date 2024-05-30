@@ -1,4 +1,4 @@
-//===--- ReduceSynchronizationOverheadCheck.h - clang-tidy ------*- C++ -*-===//
+//===--- UseAtomicInsteadOfCriticalCheck.h - clang-tidy ---------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_OPENMP_REDUCESYNCHRONIZATIONOVERHEADCHECK_H
-#define LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_OPENMP_REDUCESYNCHRONIZATIONOVERHEADCHECK_H
+#ifndef LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_OPENMP_USEATOMICINSTEADOFCRITICALCHECK_H
+#define LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_OPENMP_USEATOMICINSTEADOFCRITICALCHECK_H
 
 #include "../ClangTidyCheck.h"
 
@@ -16,10 +16,10 @@ namespace clang::tidy::openmp {
 /// FIXME: Write a short description.
 ///
 /// For the user-facing documentation see:
-/// http://clang.llvm.org/extra/clang-tidy/checks/openmp/reduce-synchronization-overhead.html
-class ReduceSynchronizationOverheadCheck : public ClangTidyCheck {
+/// http://clang.llvm.org/extra/clang-tidy/checks/openmp/use-atomic-instead-of-critical.html
+class UseAtomicInsteadOfCriticalCheck : public ClangTidyCheck {
 public:
-  ReduceSynchronizationOverheadCheck(StringRef Name, ClangTidyContext *Context)
+  UseAtomicInsteadOfCriticalCheck(StringRef Name, ClangTidyContext *Context)
       : ClangTidyCheck(Name, Context) {}
   void registerMatchers(ast_matchers::MatchFinder *Finder) override;
   void check(const ast_matchers::MatchFinder::MatchResult &Result) override;
@@ -33,4 +33,4 @@ public:
 
 } // namespace clang::tidy::openmp
 
-#endif // LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_OPENMP_REDUCESYNCHRONIZATIONOVERHEADCHECK_H
+#endif // LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_OPENMP_USEATOMICINSTEADOFCRITICALCHECK_H

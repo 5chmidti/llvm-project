@@ -320,10 +320,10 @@ Clang-Tidy Checks
    :doc:`openmp-do-not-modify-loop-variable <openmp/do-not-modify-loop-variable>`,
    :doc:`openmp-exception-escape <openmp/exception-escape>`,
    :doc:`openmp-missing-for-in-parallel-construct-before-for-loop <openmp/missing-for-in-parallel-construct-before-for-loop>`,
-   :doc:`openmp-missing-ordered-directive-after-ordered-clause <openmp/missing-ordered-directive-after-ordered-clause>`, "Yes"
-   :doc:`openmp-reduce-synchronization-overhead <openmp/reduce-synchronization-overhead>`, "Yes"
+   :doc:`openmp-missing-ordered-directive-after-ordered-clause <openmp/missing-ordered-directive-after-ordered-clause>`,
    :doc:`openmp-specify-schedule <openmp/specify-schedule>`,
    :doc:`openmp-unprotected-shared-variable-access <openmp/unprotected-shared-variable-access>`,
+   :doc:`openmp-use-atomic-instead-of-critical <openmp/use-atomic-instead-of-critical>`, "Yes"
    :doc:`openmp-use-default-none <openmp/use-default-none>`,
    :doc:`openmp-use-masked-instead-of-deprecated-master <openmp/use-masked-instead-of-deprecated-master>`, "Yes"
    :doc:`openmp-use-reduction <openmp/use-reduction>`, "Yes"
