@@ -10,11 +10,13 @@ add_clang_library(clangTidyOpenMPModule
   DoNotModifyLoopVariableCheck.cpp
   ExceptionEscapeCheck.cpp
   MissingForInParallelDirectiveBeforeForLoopCheck.cpp
+  MissingOrderedDirectiveAfterOrderedClauseCheck.cpp
   OpenMPTidyModule.cpp
   ReduceSynchronizationOverheadCheck.cpp
   SpecifyScheduleCheck.cpp
   UnprotectedSharedVariableAccessCheck.cpp
   UseDefaultNoneCheck.cpp
+  UseMaskedInsteadOfDeprecatedMasterCheck.cpp
   UseReductionCheck.cpp
 
   LINK_LIBS

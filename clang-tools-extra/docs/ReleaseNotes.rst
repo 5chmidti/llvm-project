@@ -144,6 +144,11 @@ New checks
   Finds OpenMP parallel directives where the next statement is a for loop,
   and the ``parallel`` directive is not a ``parallel for`` directive.
 
+- New :doc:`openmp-missing-ordered-directive-after-ordered-clause
+  <clang-tidy/checks/openmp/missing-ordered-directive-after-ordered-clause>` check.
+
+  FIXME: add release notes.
+
 - New :doc:`openmp-reduce-synchronization-overhead
   <clang-tidy/checks/openmp/reduce-synchronization-overhead>` check.
 
