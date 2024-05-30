@@ -43,7 +43,7 @@ enum class ReductionKind {
   Or,
 };
 
-llvm::StringRef tostring(const ReductionKind Kind) {
+llvm::StringRef toString(const ReductionKind Kind) {
   switch (Kind) {
   case ReductionKind::Invalid:
     return "Invalid";
@@ -247,52 +247,77 @@ void UseReductionCheck::check(const MatchFinder::MatchResult &Result) {
   struct ReductionInfo {
     llvm::SmallSet<ReductionKind, 4> Reductions;
     llvm::SmallVector<const DeclRefExpr *> References;
+    llvm::SmallSet<const OMPExecutableDirective *, 2> AccessDirectives;
   };
 
   std::map<const ValueDecl *, ReductionInfo> Reductions{};
 
-  for (const ast_matchers::BoundNodes &M : match(
-           findAll(traverse(
-               TK_IgnoreUnlessSpelledInSource,
-               mapAnyOf(ompAtomicDirective, ompCriticalDirective)
-                   .with(has(
-                       binaryOperation(
-                           anyOf(
-                               binaryOperation(
-                                   isAssignmentOperator(),
-                                   hasLHS(declRefExpr(to(varDecl().bind("var")))
-                                              .bind("dref")),
-                                   hasRHS(binaryOperation(
-                                       isReductionOperator(),
-                                       unless(isCompoundReductionOperator())))),
-                               binaryOperation(
-                                   isCompoundReductionOperator(),
-                                   hasLHS(declRefExpr(to(varDecl().bind("var")))
-                                              .bind("dref")))))
-                           .bind("reduction"))))),
-           *Directive->getStructuredBlock(), Ctx)) {
+  for (const ast_matchers::BoundNodes &M :
+       match(findAll(traverse(
+                 TK_IgnoreUnlessSpelledInSource,
+                 mapAnyOf(ompAtomicDirective, ompCriticalDirective)
+                     .with(has(binaryOperation(anyOf(
+                         binaryOperation(
+                             isAssignmentOperator(),
+                             hasLHS(declRefExpr(to(varDecl().bind("var")))
+                                        .bind("dref")),
+                             hasRHS(binaryOperation(
+                                        isReductionOperator(),
+                                        unless(isCompoundReductionOperator()))
+                                        .bind("reduction"))),
+                         binaryOperation(
+                             isCompoundReductionOperator(),
+                             hasLHS(declRefExpr(to(varDecl().bind("var")))
+                                        .bind("dref")))
+                             .bind("reduction")))))
+                     .bind("access-directive"))),
+             *Directive->getStructuredBlock(), Ctx)) {
     const auto *DRef = M.getNodeAs<DeclRefExpr>("dref");
     const auto *Var = M.getNodeAs<VarDecl>("var");
-
     const auto *Op = M.getNodeAs<Expr>("reduction");
     Reductions[Var].Reductions.insert(translateToReductionKind(Op));
     Reductions[Var].References.push_back(DRef);
+
+    // When a reduction is inside an atomic directive, then the other variable
+    // inside the atomic cannot be shared as per the atomic definition (access
+    // to ONE storage location is atomic). Therefore, we save the atomic
+    // directive for removal with a fix-it hint.
+    Reductions[Var].AccessDirectives.insert(
+        M.getNodeAs<OMPExecutableDirective>("access-directive"));
   }
 
   for (const auto &[Var, Info] : Reductions) {
-    if (Info.Reductions.size() > 1) {
-      llvm::errs() << "more than one reduction\n";
+    const ReductionKind Reduction = *Info.Reductions.begin();
+    if (Reduction == ReductionKind::Invalid || Info.Reductions.size() != 1 ||
+        Info.AccessDirectives.size() != 1)
       continue;
+
+    const OMPExecutableDirective *AccessDirective =
+        *Info.AccessDirectives.begin();
+    const bool IsInAtomic = llvm::isa<OMPAtomicDirective>(AccessDirective);
+
+    llvm::SmallVector<FixItHint, 2> Fixes{FixItHint::CreateInsertion(
+        Directive->getEndLoc(), (" reduction(" + toString(Reduction) + " : " +
+                                 Var->getNameAsString() + ")")
+                                    .str())};
+
+    if (IsInAtomic)
+      Fixes.push_back(
+          FixItHint::CreateRemoval(AccessDirective->getSourceRange()));
+
+    {
+      auto Diag = diag(Directive->getBeginLoc(), "prefer to use a reduction")
+                  << Directive->getSourceRange();
+      if (IsInAtomic)
+        Diag << Fixes;
     }
 
-    const ReductionKind Reduction = *Info.Reductions.begin();
-
-    diag(Directive->getBeginLoc(), "prefer to use a reduction")
-        << Directive->getSourceRange()
-        << FixItHint::CreateInsertion(Directive->getEndLoc(),
-                                      (" reduction(" + tostring(Reduction) +
-                                       " : " + Var->getNameAsString() + ")")
-                                          .str());
+    if (!IsInAtomic)
+      diag(AccessDirective->getBeginLoc(),
+           "the reduction involves a 'critical' section, check if it can be "
+           "removed in favor of a 'reduction' clause",
+           DiagnosticIDs::Level::Note)
+          << AccessDirective->getSourceRange() << Fixes;
 
     for (const DeclRefExpr *Ref : Info.References)
       diag(Ref->getLocation(), "reduction of %0 happens here",
