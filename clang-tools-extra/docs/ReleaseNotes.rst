@@ -160,6 +160,11 @@ New checks
 
   Finds unprotected accesses to shared variables.
 
+- New :doc:`openmp-use-masked-instead-of-deprecated-master
+  <clang-tidy/checks/openmp/use-masked-instead-of-deprecated-master>` check.
+
+  FIXME: add release notes.
+
 - New :doc:`openmp-use-reduction
   <clang-tidy/checks/openmp/use-reduction>` check.
 
