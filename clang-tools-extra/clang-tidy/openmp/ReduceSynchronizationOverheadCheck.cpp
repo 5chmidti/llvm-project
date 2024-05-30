@@ -331,7 +331,7 @@ void ReduceSynchronizationOverheadCheck::check(
   if (const auto *const Parallel =
           Result.Nodes.getNodeAs<OMPExecutableDirective>(
               "parallel-directive")) {
-    const auto SharedVariables = openmp::getSharedVariables(Parallel);
+    const auto SharedVariables = openmp::getSharedVariables(Parallel, Ctx);
     for (const ValueDecl *const Shared : SharedVariables) {
       std::vector<DiagnosticData> DiagData;
       const auto IsAReductionVariable = hasAncestor(ompExecutableDirective(

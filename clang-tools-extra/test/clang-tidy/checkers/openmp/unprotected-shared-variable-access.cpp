@@ -309,6 +309,31 @@ void var(int* Buffer, int BufferSize) {
         __sync_fetch_and_add(&Sum, 1);
 // CHECK-MESSAGES: :[[@LINE-1]]:31: warning: do not access shared variable 'Sum' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
     }
+
+    int i, j;
+    #pragma omp parallel for ordered(2)
+    for (i = 0; i < BufferSize; ++i) {
+        for (j = 0; j < BufferSize; ++j) {
+        #pragma omp ordered depend(source)
+            ;
+        }
+    }
+
+    #pragma omp parallel for ordered
+    for (i = 0; i < BufferSize; ++i) {
+        for (j = 0; j < BufferSize; ++j) {
+// CHECK-MESSAGES: :[[@LINE-1]]:14: warning: do not access shared variable 'j' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
+// CHECK-MESSAGES: :[[@LINE-2]]:21: warning: do not access shared variable 'j' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
+// CHECK-MESSAGES: :[[@LINE-3]]:39: warning: do not access shared variable 'j' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
+        #pragma omp ordered
+            ;
+        }
+    }
+
+    #pragma omp parallel for collapse(2)
+    for (i = 0; i < BufferSize; ++i)
+        for (j = 0; j < BufferSize; ++j)
+            ;
 }
 
 void varAtomic(int* Buffer, int BufferSize) {

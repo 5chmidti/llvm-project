@@ -86,7 +86,8 @@ AST_POLYMORPHIC_MATCHER_P(
 }
 
 llvm::SmallPtrSet<const clang::ValueDecl *, 4>
-getSharedVariables(const OMPExecutableDirective *Directive);
+getSharedVariables(const OMPExecutableDirective *Directive,
+                   const ASTContext &Ctx);
 
 template <typename ClauseKind>
 llvm::SmallPtrSet<const clang::ValueDecl *, 4>
@@ -124,7 +125,8 @@ getMappedDeclsOf(const clang::OMPExecutableDirective *const Directive) {
 }
 
 llvm::SmallPtrSet<const clang::ValueDecl *, 4>
-getPrivatizedVariables(const OMPExecutableDirective *Directive);
+getPrivatizedVariables(const OMPExecutableDirective *Directive,
+                       const ASTContext &Ctx);
 
 llvm::SmallPtrSet<const clang::ValueDecl *, 4>
 getDependVariables(const OMPExecutableDirective *Directive);

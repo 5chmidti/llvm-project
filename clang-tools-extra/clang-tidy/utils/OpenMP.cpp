@@ -7,11 +7,17 @@
 //===----------------------------------------------------------------------===//
 
 #include "OpenMP.h"
+#include "clang/AST/ASTContext.h"
 #include "clang/AST/Decl.h"
+#include "clang/AST/Expr.h"
 #include "clang/AST/OpenMPClause.h"
+#include "clang/AST/OperationKinds.h"
+#include "clang/AST/RecursiveASTVisitor.h"
+#include "clang/AST/Stmt.h"
 #include "clang/AST/StmtOpenMP.h"
 #include "clang/Basic/OpenMPKinds.h"
 #include "llvm/Support/Casting.h"
+#include <cstdint>
 
 template <typename ClauseKind>
 void addCapturedDeclsOf(const clang::OMPExecutableDirective *const Directive,
@@ -50,7 +56,8 @@ const ast_matchers::internal::MapAnyOfMatcherImpl<
     ompPrivatizationClause;
 
 llvm::SmallPtrSet<const clang::ValueDecl *, 4>
-getSharedVariables(const OMPExecutableDirective *Directive) {
+getSharedVariables(const OMPExecutableDirective *Directive,
+                   const ASTContext &Ctx) {
   if (!isOpenMPParallelDirective(Directive->getDirectiveKind()) &&
       !isOpenMPTaskingDirective(Directive->getDirectiveKind()))
     return {};
@@ -86,7 +93,8 @@ getSharedVariables(const OMPExecutableDirective *Directive) {
 }
 
 llvm::SmallPtrSet<const clang::ValueDecl *, 4>
-getPrivatizedVariables(const OMPExecutableDirective *Directive) {
+getPrivatizedVariables(const OMPExecutableDirective *Directive,
+                       const ASTContext &Ctx) {
   llvm::SmallPtrSet<const clang::ValueDecl *, 4> Decls;
 
   addCapturedDeclsOf<OMPFirstprivateClause>(Directive, Decls);
@@ -96,6 +104,62 @@ getPrivatizedVariables(const OMPExecutableDirective *Directive) {
   addCapturedDeclsOf<OMPReductionClause>(Directive, Decls);
   addCapturedDeclsOf<OMPTaskReductionClause>(Directive, Decls);
   addCapturedDeclsOf<OMPInReductionClause>(Directive, Decls);
+
+  if (const auto *Ordered = Directive->getSingleClause<OMPOrderedClause>()) {
+    if (const Expr *NumForLoopsExpr = Ordered->getNumForLoops()) {
+      Expr::EvalResult NumForLoopsEval;
+      NumForLoopsExpr->EvaluateAsInt(NumForLoopsEval, Ctx);
+      const auto NumForLoops = NumForLoopsEval.Val.getInt().getExtValue();
+      for (int LoopCounterIndex = 0; LoopCounterIndex < NumForLoops;
+           ++LoopCounterIndex)
+        if (const auto *DRef = llvm::dyn_cast<DeclRefExpr>(
+                Ordered->getLoopCounter(LoopCounterIndex))) {
+          Decls.insert(DRef->getDecl());
+        }
+    }
+  }
+
+  if (const auto *Collapse = Directive->getSingleClause<OMPCollapseClause>()) {
+    const Expr *NumForLoopsExpr = Collapse->getNumForLoops();
+    Expr::EvalResult NumForLoopsEval;
+    NumForLoopsExpr->EvaluateAsInt(NumForLoopsEval, Ctx);
+    const auto NumForLoops = NumForLoopsEval.Val.getInt().getExtValue();
+
+    class Visitor : public RecursiveASTVisitor<Visitor> {
+    public:
+      using Base = RecursiveASTVisitor<Visitor>;
+
+      Visitor(int64_t NumForLoops,
+              llvm::SmallPtrSet<const clang::ValueDecl *, 4> &Decls)
+          : NumForLoops(NumForLoops), Decls(Decls) {}
+
+      bool TraverseForStmt(ForStmt *FS) {
+        if (NumForLoops == 0)
+          return false;
+
+        const auto *BinOp = llvm::dyn_cast<BinaryOperator>(FS->getInit());
+        if (BinOp->getOpcode() != BinaryOperatorKind::BO_Assign)
+          return false;
+        const Expr *LHS = BinOp->getLHS();
+        const auto *DRef = llvm::dyn_cast<DeclRefExpr>(LHS);
+        if (!DRef)
+          return false;
+        Decls.insert(DRef->getDecl());
+
+        --NumForLoops;
+        if (NumForLoops != 0)
+          return Base::TraverseForStmt(FS);
+
+        return false;
+      }
+
+      int64_t NumForLoops = 0;
+      llvm::SmallPtrSet<const clang::ValueDecl *, 4> &Decls;
+    };
+
+    Visitor V(NumForLoops, Decls);
+    V.TraverseStmt(const_cast<Stmt *>(Directive->getAssociatedStmt()));
+  }
 
   return Decls;
 }

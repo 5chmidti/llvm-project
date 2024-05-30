@@ -115,9 +115,11 @@ public:
     InnerLocal,
   };
 
+  explicit SharedAndPrivateState(const ASTContext &Ctx) : Ctx{Ctx} {}
+
   void add(const OMPExecutableDirective *const Directive) {
-    const auto Shared = getSharedVariables(Directive);
-    const auto Private = getPrivatizedVariables(Directive);
+    const auto Shared = getSharedVariables(Directive, Ctx);
+    const auto Private = getPrivatizedVariables(Directive, Ctx);
 
     ChangedVars.push_back({});
 
@@ -197,6 +199,8 @@ private:
     llvm::SmallSet<State, 3> AllTime;
   };
 
+  const ASTContext &Ctx;
+
   std::map<const ValueDecl *, StateInfo> Vars;
   std::vector<llvm::SmallPtrSet<const ValueDecl *, 4>> ChangedVars;
 };
@@ -255,6 +259,8 @@ private:
 
 class VariableState {
 public:
+  explicit VariableState(const ASTContext &Ctx) : SharedAndPrivateVars(Ctx) {}
+
   void add(const OMPExecutableDirective *Directive) {
     SharedAndPrivateVars.add(Directive);
     Directives.add(Directive);
@@ -282,7 +288,7 @@ class Visitor : public RecursiveASTVisitor<Visitor> {
 public:
   Visitor(ASTContext &Ctx, llvm::ArrayRef<llvm::StringRef> ThreadSafeTypes,
           llvm::ArrayRef<llvm::StringRef> ThreadSafeFunctions)
-      : Ctx(Ctx), ThreadSafeTypes(ThreadSafeTypes),
+      : State(Ctx), Ctx(Ctx), ThreadSafeTypes(ThreadSafeTypes),
         ThreadSafeFunctions(ThreadSafeFunctions) {}
 
   using Base = RecursiveASTVisitor<Visitor>;
