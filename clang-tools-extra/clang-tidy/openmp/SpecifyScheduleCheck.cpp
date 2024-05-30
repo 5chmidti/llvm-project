@@ -14,6 +14,7 @@
 #include "clang/ASTMatchers/ASTMatchers.h"
 #include "clang/ASTMatchers/ASTMatchersMacros.h"
 #include "clang/Basic/OpenMPKinds.h"
+#include "clang/Basic/SourceLocation.h"
 #include "llvm/Frontend/OpenMP/OMP.h.inc"
 
 using namespace clang::ast_matchers;
@@ -59,12 +60,12 @@ void SpecifyScheduleCheck::check(const MatchFinder::MatchResult &Result) {
   const auto *Directive =
       Result.Nodes.getNodeAs<OMPExecutableDirective>("directive");
 
-  if (Result.Nodes.getNodeAs<OMPScheduleClause>("auto-schedule")) {
+  if (const auto *Schedule =
+          Result.Nodes.getNodeAs<OMPScheduleClause>("auto-schedule")) {
     diag(Directive->getBeginLoc(),
          "the 'auto' scheduling kind results in an implementation defined "
          "schedule, which may not fit the work distribution across iterations")
-        << Directive->getSourceRange()
-        << llvm::omp::getOpenMPDirectiveName(Directive->getDirectiveKind());
+        << SourceRange(Schedule->getBeginLoc(), Schedule->getEndLoc());
     return;
   }
 
