@@ -6,7 +6,7 @@ void test() {
     for (int i = 0; i < 10; ++i)
         #pragma omp atomic
             Sum += i;
-// CHECK-MESSAGES: :[[@LINE-4]]:5: warning: prefer to use a reduction [openmp-use-reduction]
+// CHECK-MESSAGES: :[[@LINE-4]]:5: warning: prefer to use a 'reduction' clause with '+' for 'Sum' [openmp-use-reduction]
 // CHECK-FIXES: #pragma omp parallel for reduction(+ : Sum)
 // CHECK-FIXES-NEXT: for (int i = 0; i < 10; ++i)
 // CHECK-FIXES-NEXT: {{^\ +}}{{$}}
@@ -17,7 +17,7 @@ void test() {
     for (int i = 0; i < 10; ++i)
         #pragma omp atomic
             Sum = i + Sum;
-// CHECK-MESSAGES: :[[@LINE-4]]:5: warning: prefer to use a reduction [openmp-use-reduction]
+// CHECK-MESSAGES: :[[@LINE-4]]:5: warning: prefer to use a 'reduction' clause with '+' for 'Sum' [openmp-use-reduction]
 // CHECK-FIXES: #pragma omp parallel
 // CHECK-FIXES: #pragma omp for reduction(+ : Sum)
 // CHECK-FIXES-NEXT: for (int i = 0; i < 10; ++i)
@@ -28,14 +28,14 @@ void test() {
     for (int i = 0; i < 10; ++i)
         #pragma omp critical
             Sum += i;
-// CHECK-MESSAGES: :[[@LINE-4]]:5: warning: prefer to use a reduction [openmp-use-reduction]
+// CHECK-MESSAGES: :[[@LINE-4]]:5: warning: prefer to use a 'reduction' clause with '+' for 'Sum' [openmp-use-reduction]
 
     #pragma omp parallel
     #pragma omp for
     for (int i = 0; i < 10; ++i)
         #pragma omp critical
             Sum = i + Sum;
-// CHECK-MESSAGES: :[[@LINE-4]]:5: warning: prefer to use a reduction [openmp-use-reduction]
+// CHECK-MESSAGES: :[[@LINE-4]]:5: warning: prefer to use a 'reduction' clause with '+' for 'Sum' [openmp-use-reduction]
 
     #pragma omp parallel
     {

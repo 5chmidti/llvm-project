@@ -306,8 +306,9 @@ void UseReductionCheck::check(const MatchFinder::MatchResult &Result) {
           FixItHint::CreateRemoval(AccessDirective->getSourceRange()));
 
     {
-      auto Diag = diag(Directive->getBeginLoc(), "prefer to use a reduction")
-                  << Directive->getSourceRange();
+      auto Diag = diag(Directive->getBeginLoc(),
+                       "prefer to use a 'reduction' clause with '%0' for %1")
+                  << Directive->getSourceRange() << toString(Reduction) << Var;
       if (IsInAtomic)
         Diag << Fixes;
     }
