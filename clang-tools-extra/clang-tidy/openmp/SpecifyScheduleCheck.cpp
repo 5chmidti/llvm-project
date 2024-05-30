@@ -33,6 +33,9 @@ const ast_matchers::internal::VariadicDynCastAllOfMatcher<
 const ast_matchers::internal::VariadicDynCastAllOfMatcher<OMPClause,
                                                           OMPScheduleClause>
     ompScheduleClause;
+const ast_matchers::internal::VariadicDynCastAllOfMatcher<OMPClause,
+                                                          OMPOrderedClause>
+    ompOrderedClause;
 
 AST_MATCHER(OMPExecutableDirective, isOMPForDirective) {
   return isOpenMPDirectiveKind(Node.getDirectiveKind(),
@@ -41,6 +44,11 @@ AST_MATCHER(OMPExecutableDirective, isOMPForDirective) {
 
 AST_MATCHER(OMPScheduleClause, isAutoKind) {
   return Node.getScheduleKind() == OpenMPScheduleClauseKind::OMPC_SCHEDULE_auto;
+}
+
+AST_MATCHER_P(OMPScheduleClause, hasScheduleKind, OpenMPScheduleClauseKind,
+              Kind) {
+  return Node.getScheduleKind() == Kind;
 }
 // NOLINTEND(readability-identifier-naming)
 } // namespace
@@ -51,12 +59,40 @@ void SpecifyScheduleCheck::registerMatchers(MatchFinder *Finder) {
           isOMPForDirective(),
           anyOf(unless(ast_matchers::hasAnyClause(ompScheduleClause())),
                 ast_matchers::hasAnyClause(
-                    ompScheduleClause(isAutoKind()).bind("auto-schedule"))))
+                    ompScheduleClause(isAutoKind()).bind("auto-schedule"))),
+          optionally(
+              ast_matchers::hasAnyClause(ompOrderedClause().bind("ordered"))))
           .bind("directive"),
+      this);
+  Finder->addMatcher(
+      ompExecutableDirective(
+          isOMPForDirective(),
+          optionally(ast_matchers::hasAnyClause(
+              ompScheduleClause(unless(isAutoKind())).bind("schedule"))),
+          ast_matchers::hasAnyClause(ompOrderedClause()))
+          .bind("directive-ordered"),
       this);
 }
 
 void SpecifyScheduleCheck::check(const MatchFinder::MatchResult &Result) {
+  if (const auto *DirectiveOrdered =
+          Result.Nodes.getNodeAs<OMPExecutableDirective>("directive-ordered")) {
+    if (const auto *Schedule =
+            Result.Nodes.getNodeAs<OMPScheduleClause>("schedule");
+        Schedule &&
+        Schedule->getScheduleKind() ==
+            OpenMPScheduleClauseKind::OMPC_SCHEDULE_static &&
+        !Schedule->getChunkSize()) {
+      diag(
+          DirectiveOrdered->getBeginLoc(),
+          "specify the chunk-size for the 'static' schedule to avoid executing "
+          "chunks that are too large which may lead to serialized execution "
+          "due to the 'ordered' clause")
+          << DirectiveOrdered->getSourceRange();
+    }
+    return;
+  }
+
   const auto *Directive =
       Result.Nodes.getNodeAs<OMPExecutableDirective>("directive");
 
@@ -71,10 +107,12 @@ void SpecifyScheduleCheck::check(const MatchFinder::MatchResult &Result) {
 
   diag(Directive->getBeginLoc(),
        "specify the schedule for this OpenMP '%0' "
-       "directive to fit the work distribution across iterations, "
+       "directive to fit the %select{|ordering dependencies and }1work "
+       "distribution across iterations, "
        "the default is implementation defined")
       << Directive->getSourceRange()
-      << llvm::omp::getOpenMPDirectiveName(Directive->getDirectiveKind());
+      << llvm::omp::getOpenMPDirectiveName(Directive->getDirectiveKind())
+      << (Result.Nodes.getNodeAs<OMPOrderedClause>("ordered") != nullptr);
 }
 
 } // namespace clang::tidy::openmp
