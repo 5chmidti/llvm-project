@@ -9,6 +9,7 @@ add_clang_unittest(ASTMatchersTests
   ASTMatchersNodeTest.cpp
   ASTMatchersNarrowingTest.cpp
   ASTMatchersTraversalTest.cpp
+  ASTMatchersDocTests.cpp
   GtestMatchersTest.cpp
   )
 
