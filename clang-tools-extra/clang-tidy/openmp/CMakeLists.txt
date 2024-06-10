@@ -9,6 +9,7 @@ add_clang_library(clangTidyOpenMPModule
   DeclareLoopIterationVariableInForInitStatementCheck.cpp
   DoNotModifyLoopVariableCheck.cpp
   ExceptionEscapeCheck.cpp
+  ImplementationDefinedUnrollCheck.cpp
   MissingForInParallelDirectiveBeforeForLoopCheck.cpp
   MissingOrderedDirectiveAfterOrderedClauseCheck.cpp
   OpenMPTidyModule.cpp

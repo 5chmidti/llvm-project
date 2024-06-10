@@ -319,6 +319,7 @@ Clang-Tidy Checks
    :doc:`openmp-declare-loop-iteration-variable-in-for-init-statement <openmp/declare-loop-iteration-variable-in-for-init-statement>`,
    :doc:`openmp-do-not-modify-loop-variable <openmp/do-not-modify-loop-variable>`,
    :doc:`openmp-exception-escape <openmp/exception-escape>`,
+   :doc:`openmp-implementation-defined-unroll <openmp/implementation-defined-unroll>`,
    :doc:`openmp-missing-for-in-parallel-construct-before-for-loop <openmp/missing-for-in-parallel-construct-before-for-loop>`,
    :doc:`openmp-missing-ordered-directive-after-ordered-clause <openmp/missing-ordered-directive-after-ordered-clause>`,
    :doc:`openmp-specify-schedule <openmp/specify-schedule>`,

@@ -138,6 +138,11 @@ New checks
   Finds openmp loop directives where the loop counter or condition is modified
   in the body.
 
+- New :doc:`openmp-implementation-defined-unroll
+  <clang-tidy/checks/openmp/implementation-defined-unroll>` check.
+
+  FIXME: add release notes.
+
 - New :doc:`openmp-missing-for-in-parallel-construct-before-for-loop
   <clang-tidy/checks/openmp/missing-for-in-parallel-construct-before-for-loop>` check.
 

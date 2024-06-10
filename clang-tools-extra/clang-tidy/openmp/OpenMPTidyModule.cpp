@@ -14,6 +14,7 @@
 #include "DeclareLoopIterationVariableInForInitStatementCheck.h"
 #include "DoNotModifyLoopVariableCheck.h"
 #include "ExceptionEscapeCheck.h"
+#include "ImplementationDefinedUnrollCheck.h"
 #include "MissingForInParallelDirectiveBeforeForLoopCheck.h"
 #include "MissingOrderedDirectiveAfterOrderedClauseCheck.h"
 #include "UseAtomicInsteadOfCriticalCheck.h"
@@ -41,6 +42,8 @@ public:
         "openmp-do-not-modify-loop-variable");
     CheckFactories.registerCheck<ExceptionEscapeCheck>(
         "openmp-exception-escape");
+    CheckFactories.registerCheck<ImplementationDefinedUnrollCheck>(
+        "openmp-implementation-defined-unroll");
     CheckFactories
         .registerCheck<MissingForInParallelDirectiveBeforeForLoopCheck>(
             "openmp-missing-for-in-parallel-directive-before-for-loop");
