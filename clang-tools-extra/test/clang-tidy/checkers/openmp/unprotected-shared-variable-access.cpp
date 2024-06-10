@@ -1182,6 +1182,19 @@ void tasks() {
                 Sum = 1;
 // CHECK-MESSAGES: :[[@LINE-1]]:17: warning: do not access shared variable 'Sum' of type 'int' without synchronization; specify synchronization on the task with `depend` [openmp-unprotected-shared-variable-access]
 
+    #pragma omp parallel
+        #pragma omp single
+        {
+            #pragma omp task
+            {
+                #pragma omp task
+                    Sum = 1;
+// CHECK-MESSAGES: :[[@LINE-1]]:21: warning: do not access shared variable 'Sum' of type 'int' without synchronization; specify synchronization on the task with `depend` [openmp-unprotected-shared-variable-access]
+            }
+            #pragma omp taskwait
+            Sum = 1;
+        }
+
     #pragma omp parallel sections
     {
         #pragma omp task
