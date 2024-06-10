@@ -113,6 +113,7 @@ public:
     Private,
     Shared,
     InnerLocal,
+    Parameter,
   };
 
   explicit SharedAndPrivateState(const ASTContext &Ctx) : Ctx{Ctx} {}
