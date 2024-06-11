@@ -137,14 +137,16 @@ getPrivatizedVariables(const OMPExecutableDirective *Directive,
         if (NumForLoops == 0)
           return false;
 
-        const auto *BinOp = llvm::dyn_cast<BinaryOperator>(FS->getInit());
-        if (BinOp->getOpcode() != BinaryOperatorKind::BO_Assign)
-          return false;
-        const Expr *LHS = BinOp->getLHS();
-        const auto *DRef = llvm::dyn_cast<DeclRefExpr>(LHS);
-        if (!DRef)
-          return false;
-        Decls.insert(DRef->getDecl());
+        if (const auto *BinOp =
+                llvm::dyn_cast_if_present<BinaryOperator>(FS->getInit())) {
+          if (BinOp->getOpcode() != BinaryOperatorKind::BO_Assign)
+            return false;
+          const Expr *LHS = BinOp->getLHS();
+          const auto *DRef = llvm::dyn_cast<DeclRefExpr>(LHS);
+          if (!DRef)
+            return false;
+          Decls.insert(DRef->getDecl());
+        }
 
         --NumForLoops;
         if (NumForLoops != 0)
