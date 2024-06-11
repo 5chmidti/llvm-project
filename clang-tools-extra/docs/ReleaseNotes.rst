@@ -154,6 +154,11 @@ New checks
 
   FIXME: add release notes.
 
+- New :doc:`openmp-task-dependencies
+  <clang-tidy/checks/openmp/task-dependencies>` check.
+
+  FIXME: add release notes.
+
 - New :doc:`openmp-use-atomic-instead-of-critical
   <clang-tidy/checks/openmp/use-atomic-instead-of-critical>` check.
 

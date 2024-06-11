@@ -17,8 +17,8 @@
 #include "ImplementationDefinedUnrollCheck.h"
 #include "MissingForInParallelDirectiveBeforeForLoopCheck.h"
 #include "MissingOrderedDirectiveAfterOrderedClauseCheck.h"
-#include "UseAtomicInsteadOfCriticalCheck.h"
 #include "SpecifyScheduleCheck.h"
+#include "TaskDependenciesCheck.h"
 #include "UnprotectedSharedVariableAccessCheck.h"
 #include "UseDefaultNoneCheck.h"
 #include "UseMaskedInsteadOfDeprecatedMasterCheck.h"
@@ -49,6 +49,8 @@ public:
             "openmp-missing-for-in-parallel-directive-before-for-loop");
     CheckFactories.registerCheck<MissingOrderedDirectiveAfterOrderedClauseCheck>(
         "openmp-missing-ordered-directive-after-ordered-clause");
+    CheckFactories.registerCheck<TaskDependenciesCheck>(
+        "openmp-task-dependencies");
     CheckFactories.registerCheck<UseAtomicInsteadOfCriticalCheck>(
         "openmp-use-atomic-instead-of-critical");
     CheckFactories.registerCheck<SpecifyScheduleCheck>(

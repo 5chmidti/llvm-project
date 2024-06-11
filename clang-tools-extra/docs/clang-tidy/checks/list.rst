@@ -323,6 +323,7 @@ Clang-Tidy Checks
    :doc:`openmp-missing-for-in-parallel-construct-before-for-loop <openmp/missing-for-in-parallel-construct-before-for-loop>`,
    :doc:`openmp-missing-ordered-directive-after-ordered-clause <openmp/missing-ordered-directive-after-ordered-clause>`,
    :doc:`openmp-specify-schedule <openmp/specify-schedule>`,
+   :doc:`openmp-task-dependencies <openmp/task-dependencies>`,
    :doc:`openmp-unprotected-shared-variable-access <openmp/unprotected-shared-variable-access>`,
    :doc:`openmp-use-atomic-instead-of-critical <openmp/use-atomic-instead-of-critical>`, "Yes"
    :doc:`openmp-use-default-none <openmp/use-default-none>`,
