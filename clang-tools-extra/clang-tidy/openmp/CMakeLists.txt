@@ -13,6 +13,7 @@ add_clang_library(clangTidyOpenMPModule
   MissingForInParallelDirectiveBeforeForLoopCheck.cpp
   MissingOrderedDirectiveAfterOrderedClauseCheck.cpp
   OpenMPTidyModule.cpp
+  RecursiveTaskWithoutTaskCreationConditionCheck.cpp
   TaskDependenciesCheck.cpp
   UseAtomicInsteadOfCriticalCheck.cpp
   SpecifyScheduleCheck.cpp

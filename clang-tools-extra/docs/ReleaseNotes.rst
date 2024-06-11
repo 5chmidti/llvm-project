@@ -154,6 +154,11 @@ New checks
 
   FIXME: add release notes.
 
+- New :doc:`openmp-recursive-task-without-task-creation-condition
+  <clang-tidy/checks/openmp/recursive-task-without-task-creation-condition>` check.
+
+  FIXME: add release notes.
+
 - New :doc:`openmp-task-dependencies
   <clang-tidy/checks/openmp/task-dependencies>` check.
 
