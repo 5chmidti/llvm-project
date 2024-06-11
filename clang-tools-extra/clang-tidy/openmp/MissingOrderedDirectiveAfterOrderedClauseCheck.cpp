@@ -29,18 +29,6 @@ const ast_matchers::internal::VariadicDynCastAllOfMatcher<OMPClause,
 // NOLINTEND(readability-identifier-naming)
 } // namespace
 
-class Visitor : public RecursiveASTVisitor<Visitor> {
-  using Base = RecursiveASTVisitor<Visitor>;
-
-  bool TraverseFunctionDecl(FunctionDecl *FD) {
-    FDecls.push_back(FD);
-    FDecls.pop_back();
-  }
-
-private:
-  llvm::SmallVector<const FunctionDecl *> FDecls;
-};
-
 void MissingOrderedDirectiveAfterOrderedClauseCheck::registerMatchers(
     MatchFinder *Finder) {
   Finder->addMatcher(
