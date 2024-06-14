@@ -1394,3 +1394,30 @@ void testReturnEnumValue() {
 #pragma omp parallel
     returnEnumValue();
 }
+
+template <typename T>
+void templated() {
+  int value;
+#pragma omp parallel
+  T var(value);
+}
+
+struct NonMutating {
+    explicit NonMutating(int);
+};
+struct Mutating {
+    explicit Mutating(int&);
+};
+
+
+template <typename T>
+void templatedInstatiated() {
+  int value;
+#pragma omp parallel
+  T var(value);
+}
+
+void instantations() {
+    templatedInstatiated<NonMutating>();
+    templatedInstatiated<Mutating>();
+}

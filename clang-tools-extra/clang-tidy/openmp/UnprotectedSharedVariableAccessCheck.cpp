@@ -478,7 +478,7 @@ public:
   }
 
   bool TraverseFunctionDecl(FunctionDecl *const FD) {
-    if (ParallelContextDepth == 0)
+    if (ParallelContextDepth == 0 && !FD->isTemplated())
       return Base::TraverseFunctionDecl(FD);
 
     return true;
