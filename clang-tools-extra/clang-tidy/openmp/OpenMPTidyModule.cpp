@@ -22,6 +22,7 @@
 #include "SpecifyScheduleCheck.h"
 #include "TaskDependenciesCheck.h"
 #include "UnprotectedSharedVariableAccessCheck.h"
+#include "UseAtomicInsteadOfCriticalCheck.h"
 #include "UseDefaultNoneCheck.h"
 #include "UseMaskedInsteadOfDeprecatedMasterCheck.h"
 #include "UseReductionCheck.h"
