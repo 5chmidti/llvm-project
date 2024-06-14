@@ -1375,3 +1375,15 @@ void target() {
         Sum += 0;
     }
 }
+
+template <typename ...Ts>
+void foo(Ts... args) {
+    ((args += 1),...);
+}
+
+void parameterPackCall() {
+    #pragma omp parallel
+    {
+        foo(42, 100);
+    }
+}

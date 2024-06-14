@@ -501,8 +501,11 @@ public:
     else if (FunctionName == "omp_unset_lock")
       --LockedRegionCount;
     CallStack.push_back(FDecl);
-    if (FDecl->hasBody())
+    if (FDecl->hasBody()) {
+      for (ParmVarDecl *const Param : FDecl->parameters())
+        TraverseDecl(Param);
       TraverseStmt(FDecl->getBody());
+    }
     CallStack.pop_back();
     return true;
   }
