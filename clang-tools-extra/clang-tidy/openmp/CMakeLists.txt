@@ -8,6 +8,7 @@ add_clang_library(clangTidyOpenMPModule
   CriticalSectionDeadlockCheck.cpp
   DeclareLoopIterationVariableInForInitStatementCheck.cpp
   DoNotModifyLoopVariableCheck.cpp
+  DoNotSetNumThreadsInParallelRegionCheck.cpp
   ExceptionEscapeCheck.cpp
   ImplementationDefinedUnrollCheck.cpp
   MissingForInParallelDirectiveBeforeForLoopCheck.cpp

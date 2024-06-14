@@ -138,6 +138,11 @@ New checks
   Finds openmp loop directives where the loop counter or condition is modified
   in the body.
 
+- New :doc:`openmp-do-not-set-num-threads-in-parallel-region
+  <clang-tidy/checks/openmp/do-not-set-num-threads-in-parallel-region>` check.
+
+  FIXME: add release notes.
+
 - New :doc:`openmp-implementation-defined-unroll
   <clang-tidy/checks/openmp/implementation-defined-unroll>` check.
 

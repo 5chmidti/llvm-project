@@ -13,6 +13,7 @@
 #include "CriticalSectionDeadlockCheck.h"
 #include "DeclareLoopIterationVariableInForInitStatementCheck.h"
 #include "DoNotModifyLoopVariableCheck.h"
+#include "DoNotSetNumThreadsInParallelRegionCheck.h"
 #include "ExceptionEscapeCheck.h"
 #include "ImplementationDefinedUnrollCheck.h"
 #include "MissingForInParallelDirectiveBeforeForLoopCheck.h"
@@ -43,6 +44,8 @@ public:
             "openmp-declare-loop-iteration-variable-in-for-init-statement");
     CheckFactories.registerCheck<DoNotModifyLoopVariableCheck>(
         "openmp-do-not-modify-loop-variable");
+    CheckFactories.registerCheck<DoNotSetNumThreadsInParallelRegionCheck>(
+        "openmp-do-not-set-num-threads-in-parallel-region");
     CheckFactories.registerCheck<ExceptionEscapeCheck>(
         "openmp-exception-escape");
     CheckFactories.registerCheck<ImplementationDefinedUnrollCheck>(
