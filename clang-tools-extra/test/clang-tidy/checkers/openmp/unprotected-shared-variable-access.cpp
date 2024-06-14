@@ -1387,3 +1387,10 @@ void parameterPackCall() {
         foo(42, 100);
     }
 }
+
+enum E { Foo };
+E returnEnumValue() { return Foo; }
+void testReturnEnumValue() {
+#pragma omp parallel
+    returnEnumValue();
+}

@@ -386,6 +386,10 @@ public:
     if (ParallelContextDepth == 0)
       return true;
 
+    if (llvm::isa<EnumConstantDecl>(DRef->getDecl()))
+      return true;
+
+    // FIXME: store the analysis of Vars in a cache
     const ValueDecl *Var = DRef->getDecl();
     const auto *const Variable = llvm::dyn_cast<VarDecl>(Var);
     const bool IsThreadLocal = Variable && Variable->getStorageDuration() ==
