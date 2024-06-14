@@ -17,6 +17,7 @@
 #include "ImplementationDefinedUnrollCheck.h"
 #include "MissingForInParallelDirectiveBeforeForLoopCheck.h"
 #include "MissingOrderedDirectiveAfterOrderedClauseCheck.h"
+#include "OverlappingDependencyStorageCheck.h"
 #include "RecursiveTaskWithoutTaskCreationConditionCheck.h"
 #include "SpecifyScheduleCheck.h"
 #include "TaskDependenciesCheck.h"
@@ -50,6 +51,8 @@ public:
             "openmp-missing-for-in-parallel-directive-before-for-loop");
     CheckFactories.registerCheck<MissingOrderedDirectiveAfterOrderedClauseCheck>(
         "openmp-missing-ordered-directive-after-ordered-clause");
+    CheckFactories.registerCheck<OverlappingDependencyStorageCheck>(
+        "openmp-overlapping-dependency-storage");
     CheckFactories.registerCheck<RecursiveTaskWithoutTaskCreationConditionCheck>(
         "openmp-recursive-task-without-task-creation-condition");
     CheckFactories.registerCheck<TaskDependenciesCheck>(

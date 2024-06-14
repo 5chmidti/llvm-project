@@ -322,6 +322,7 @@ Clang-Tidy Checks
    :doc:`openmp-implementation-defined-unroll <openmp/implementation-defined-unroll>`,
    :doc:`openmp-missing-for-in-parallel-construct-before-for-loop <openmp/missing-for-in-parallel-construct-before-for-loop>`,
    :doc:`openmp-missing-ordered-directive-after-ordered-clause <openmp/missing-ordered-directive-after-ordered-clause>`,
+   :doc:`openmp-overlapping-dependency-storage <openmp/overlapping-dependency-storage>`,
    :doc:`openmp-recursive-task-without-task-creation-condition <openmp/recursive-task-without-task-creation-condition>`,
    :doc:`openmp-specify-schedule <openmp/specify-schedule>`,
    :doc:`openmp-task-dependencies <openmp/task-dependencies>`,
