@@ -26,7 +26,6 @@ void test(int *Buffer, int BufferSize) {
         if (Buffer[LoopVar] > 0) {
             BufferSize = 42;
 // CHECK-MESSAGES:[[@LINE-1]]:13: warning: do not mutate the variable 'BufferSize' used in the for statement condition of the OpenMP work-sharing construct [openmp-do-not-modify-loop-variable]
-// CHECK-MESSAGES:[[@LINE-4]]:38: note: variable 'BufferSize' used in loop condition here
         }
     }
 
@@ -36,8 +35,6 @@ void test(int *Buffer, int BufferSize) {
             if (Buffer[LoopVar] > 0) {
                 BufferSize = 42;
 // CHECK-MESSAGES:[[@LINE-1]]:17: warning: do not mutate the variable 'BufferSize' used in the for statement condition of the OpenMP work-sharing construct [openmp-do-not-modify-loop-variable]
-// CHECK-MESSAGES:[[@LINE-5]]:38: note: variable 'BufferSize' used in loop condition here
-// CHECK-MESSAGES:[[@LINE-6]]:51: note: variable 'BufferSize' used in loop condition here
             }
         }
     }
@@ -48,8 +45,6 @@ void test(int *Buffer, int BufferSize) {
             if (Buffer[LoopVar] > 0) {
                 BufferSize = 42;
 // CHECK-MESSAGES:[[@LINE-1]]:17: warning: do not mutate the variable 'BufferSize' used in the for statement condition of the OpenMP work-sharing construct [openmp-do-not-modify-loop-variable]
-// CHECK-MESSAGES:[[@LINE-5]]:38: note: variable 'BufferSize' used in loop condition here
-// CHECK-MESSAGES:[[@LINE-6]]:51: note: variable 'BufferSize' used in loop condition here
             }
         }
     }
@@ -80,7 +75,6 @@ void test(int *Buffer, int BufferSize) {
         if (Buffer[LoopVar] > 0) {
             doesMutate(BufferSize);
 // CHECK-MESSAGES:[[@LINE-1]]:24: warning: do not mutate the variable 'BufferSize' used in the for statement condition of the OpenMP work-sharing construct [openmp-do-not-modify-loop-variable]
-// CHECK-MESSAGES:[[@LINE-4]]:38: note: variable 'BufferSize' used in loop condition here
             doesNotMutate(BufferSize);
         }
     }
@@ -92,7 +86,6 @@ void test(int *Buffer, int BufferSize) {
         if (LoopVar > 0) {
             Buffer[1] = 42;
 // CHECK-MESSAGES:[[@LINE-1]]:13: warning: do not mutate the variable 'Buffer' used in the for statement condition of the OpenMP work-sharing construct [openmp-do-not-modify-loop-variable]
-// CHECK-MESSAGES:[[@LINE-4]]:34: note: variable 'Buffer' used in loop condition here
         }
     }
 
@@ -101,7 +94,6 @@ void test(int *Buffer, int BufferSize) {
         if (Buffer[0] > 0) {
             doesMutate(Buffer[1]);
 // CHECK-MESSAGES:[[@LINE-1]]:24: warning: do not mutate the variable 'Buffer' used in the for statement condition of the OpenMP work-sharing construct [openmp-do-not-modify-loop-variable]
-// CHECK-MESSAGES:[[@LINE-4]]:34: note: variable 'Buffer' used in loop condition here
             doesNotMutate(Buffer[1]);
         }
     }
@@ -112,8 +104,6 @@ void test(int *Buffer, int BufferSize) {
             if (Buffer[0] > 0) {
                 doesMutate(Buffer[1]);
 // CHECK-MESSAGES:[[@LINE-1]]:28: warning: do not mutate the variable 'Buffer' used in the for statement condition of the OpenMP work-sharing construct [openmp-do-not-modify-loop-variable]
-// CHECK-MESSAGES:[[@LINE-5]]:38: note: variable 'Buffer' used in loop condition here
-// CHECK-MESSAGES:[[@LINE-6]]:50: note: variable 'Buffer' used in loop condition here
                 doesNotMutate(Buffer[1]);
             }
         }
@@ -125,8 +115,6 @@ void test(int *Buffer, int BufferSize) {
             if (Buffer[0] > 0) {
                 doesMutate(Buffer[1]);
 // CHECK-MESSAGES:[[@LINE-1]]:28: warning: do not mutate the variable 'Buffer' used in the for statement condition of the OpenMP work-sharing construct [openmp-do-not-modify-loop-variable]
-// CHECK-MESSAGES:[[@LINE-5]]:38: note: variable 'Buffer' used in loop condition here
-// CHECK-MESSAGES:[[@LINE-6]]:50: note: variable 'Buffer' used in loop condition here
                 doesNotMutate(Buffer[1]);
             }
         }
@@ -141,8 +129,6 @@ void test(int *Buffer, int BufferSize) {
             if (Buffer[0] > 0) {
                 doesMutate(Buffer[2]);
 // CHECK-MESSAGES:[[@LINE-1]]:28: warning: do not mutate the variable 'Buffer' used in the for statement condition of the OpenMP work-sharing construct [openmp-do-not-modify-loop-variable]
-// CHECK-MESSAGES:[[@LINE-5]]:38: note: variable 'Buffer' used in loop condition here
-// CHECK-MESSAGES:[[@LINE-6]]:50: note: variable 'Buffer' used in loop condition here
                 doesNotMutate(Buffer[2]);
             }
         }
@@ -158,7 +144,6 @@ void testBufferValueAsLoopBound(int ** Buffer, int * BufferSizes, int NumBuffers
             if (LoopVar > 0) {
                 BufferSizes[BufferId] = 42;
 // CHECK-MESSAGES:[[@LINE-1]]:17: warning: do not mutate the variable 'BufferSizes' used in the for statement condition of the OpenMP work-sharing construct [openmp-do-not-modify-loop-variable]
-// CHECK-MESSAGES:[[@LINE-4]]:38: note: variable 'BufferSizes' used in loop condition here
                 ++LoopVar;
 // CHECK-MESSAGES:[[@LINE-1]]:19: warning: do not mutate the variable 'LoopVar' used as the for statement counter of the OpenMP work-sharing construct [openmp-do-not-modify-loop-variable]
             }
@@ -169,7 +154,6 @@ void testBufferValueAsLoopBound(int ** Buffer, int * BufferSizes, int NumBuffers
             if (Buffer[BufferId][0] > 0) {
                 doesMutate(BufferSizes[BufferId]);
 // CHECK-MESSAGES:[[@LINE-1]]:28: warning: do not mutate the variable 'BufferSizes' used in the for statement condition of the OpenMP work-sharing construct [openmp-do-not-modify-loop-variable]
-// CHECK-MESSAGES:[[@LINE-4]]:38: note: variable 'BufferSizes' used in loop condition here
                 doesNotMutate(BufferSizes[BufferId]);
                 doesMutate(LoopVar);
 // CHECK-MESSAGES:[[@LINE-1]]:28: warning: do not mutate the variable 'LoopVar' used as the for statement counter of the OpenMP work-sharing construct [openmp-do-not-modify-loop-variable]

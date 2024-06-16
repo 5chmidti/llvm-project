@@ -7,6 +7,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "DoNotModifyLoopVariableCheck.h"
+#include "clang/AST/DeclCXX.h"
+#include "clang/Tooling/FixIt.h"
+#include "llvm/ADT/SetOperations.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include <clang/AST/Decl.h>
 #include <clang/AST/DeclBase.h>
 #include <clang/AST/Expr.h>
@@ -31,8 +35,7 @@ using internal::Matcher;
 using internal::VariadicDynCastAllOfMatcher;
 
 // NOLINTBEGIN(readability-identifier-naming)
-const VariadicDynCastAllOfMatcher<Stmt, OMPLoopBasedDirective>
-    ompLoopBasedDirective;
+const VariadicDynCastAllOfMatcher<Stmt, OMPLoopDirective> ompLoopDirective;
 // NOLINTEND(readability-identifier-naming)
 
 AST_MATCHER_P(OMPExecutableDirective, hasAssociatedStmt, Matcher<Stmt>,
@@ -45,18 +48,6 @@ AST_MATCHER_P(Stmt, ignoringContainers, Matcher<Stmt>, InnerMatcher) {
   return InnerMatcher.matches(*Node.IgnoreContainers(true), Finder, Builder);
 }
 
-class DeclRefExprFinder : public RecursiveASTVisitor<DeclRefExprFinder> {
-public:
-  bool VisitDeclRefExpr(const DeclRefExpr *const DRef) {
-    ReferencedVariables[DRef->getDecl()].push_back(DRef);
-    return true;
-  }
-
-  llvm::SmallMapVector<const ValueDecl *,
-                       llvm::SmallVector<const DeclRefExpr *, 4>, 4>
-      ReferencedVariables{};
-};
-
 std::optional<size_t> getOptCollapseNum(const OMPCollapseClause *const Collapse,
                                         const ASTContext &Ctx) {
   if (!Collapse)
@@ -68,29 +59,20 @@ std::optional<size_t> getOptCollapseNum(const OMPCollapseClause *const Collapse,
   return std::nullopt;
 }
 
-class IterVarsOfRawForStmtsFromCollapsedLoopDirective
-    : public RecursiveASTVisitor<
-          IterVarsOfRawForStmtsFromCollapsedLoopDirective> {
+class DeclRefExprInForConditionFinder
+    : public RecursiveASTVisitor<DeclRefExprInForConditionFinder> {
 public:
-  IterVarsOfRawForStmtsFromCollapsedLoopDirective(size_t NumLoopsToCheck,
-                                                  ASTContext &Ctx)
+  using Base = RecursiveASTVisitor<DeclRefExprInForConditionFinder>;
+
+  DeclRefExprInForConditionFinder(size_t NumLoopsToCheck, ASTContext &Ctx)
       : NumLoopsToCheck(NumLoopsToCheck), Ctx(Ctx) {}
 
   bool VisitForStmt(ForStmt *For) {
-    const auto MatchResult = match(LoopIterVar, *For->getInit(), Ctx);
+    IsInCondition = true;
+    Base::TraverseStmt(For->getCond());
+    IsInCondition = false;
 
-    // Keep the current for-loop iteration variable to remove from variables
-    // referenced in the current loop condition.
-    llvm::SmallVector<const ValueDecl *, 4> CurrentIterLoopVars{};
-    for (const auto &V : MatchResult)
-      CurrentIterLoopVars.push_back(V.getNodeAs<VarDecl>("var"));
-    IterLoopVars.append(CurrentIterLoopVars);
-
-    DeclRefExprFinder DRefFinder{};
-    DRefFinder.TraverseStmt(For->getCond());
-    for (const auto &DeclAndRefs : DRefFinder.ReferencedVariables)
-      if (!llvm::is_contained(CurrentIterLoopVars, DeclAndRefs.first))
-        IterConditionVars.insert(DeclAndRefs);
+    Base::VisitStmt(For->getBody());
 
     --NumLoopsToCheck;
     return NumLoopsToCheck != 0U;
@@ -100,20 +82,21 @@ public:
     --NumLoopsToCheck;
     return NumLoopsToCheck != 0U;
   }
+  bool VisitDeclRefExpr(DeclRefExpr *DRef) {
+    if (IsInCondition) {
+      const auto *VDecl = DRef->getDecl();
+      if (llvm::isa<VarDecl, FieldDecl, BindingDecl>(VDecl))
+        VariablesReferencedInConditions.insert(VDecl);
+    }
+
+    return true;
+  }
+
+  bool IsInCondition = false;
 
   size_t NumLoopsToCheck;
-  llvm::SmallVector<const ValueDecl *, 4> IterLoopVars{};
-  llvm::SmallMapVector<const ValueDecl *,
-                       llvm::SmallVector<const DeclRefExpr *, 4>, 4>
-      IterConditionVars{};
+  llvm::SmallPtrSet<const ValueDecl *, 4> VariablesReferencedInConditions;
   ASTContext &Ctx;
-  ast_matchers::internal::BindableMatcher<Stmt> LoopIterVar = stmt(anyOf(
-      declStmt(has(
-          varDecl(hasType(qualType(unless(isConstQualified())))).bind("var"))),
-      binaryOperator(isAssignmentOperator(),
-                     hasLHS(declRefExpr(to(
-                         varDecl(hasType(qualType(unless(isConstQualified()))))
-                             .bind("var")))))));
 };
 
 class AllMutationsFinder : private ExprMutationAnalyzer {
@@ -128,10 +111,12 @@ public:
         ));
 
     const auto Refs =
-        match(findAll(declRefExpr(Var, unless(hasParent(cxxOperatorCallExpr(
-                                           hasOverloadedOperatorName("[]"),
-                                           hasArgument(0, Var)))))
-                          .bind("expr")),
+        match(findAll(declRefExpr(
+                  expr().bind("expr"), Var,
+                  unless(hasParent(cxxOperatorCallExpr(
+                      hasOverloadedOperatorName("[]"), hasArgument(0, Var)))),
+                  unless(hasAncestor(forStmt(hasIncrement(
+                      hasDescendant(expr(equalsBoundNode("expr"))))))))),
               Stm, Context);
 
     auto Mutations = llvm::SmallVector<const Stmt *, 4>{};
@@ -150,46 +135,61 @@ private:
 } // namespace
 
 void DoNotModifyLoopVariableCheck::registerMatchers(MatchFinder *Finder) {
-  Finder->addMatcher(ompLoopBasedDirective(hasAssociatedStmt(ignoringContainers(
-                         mapAnyOf(forStmt, cxxForRangeStmt)
-                             .with(hasBody(stmt().bind("scope")))
-                             .bind("for-like")))),
-                     this);
+  Finder->addMatcher(
+      ompLoopDirective(hasAssociatedStmt(ignoringContainers(
+                           mapAnyOf(forStmt, cxxForRangeStmt)
+                               .with(hasBody(stmt().bind("scope")))
+                               .bind("for-like"))))
+          .bind("directive"),
+      this);
 }
 
 void DoNotModifyLoopVariableCheck::check(
     const MatchFinder::MatchResult &Result) {
   const auto *const Scope = Result.Nodes.getNodeAs<Stmt>("scope");
+  const auto *const LoopDirective =
+      Result.Nodes.getNodeAs<OMPLoopDirective>("directive");
   const auto *const Collapse =
       Result.Nodes.getNodeAs<OMPCollapseClause>("collapse");
   const auto *const ForLike = Result.Nodes.getNodeAs<Stmt>("for-like");
   const std::optional<size_t> OptCollapseNum =
       getOptCollapseNum(Collapse, *Result.Context);
-
-  IterVarsOfRawForStmtsFromCollapsedLoopDirective Visitor{
-      OptCollapseNum.value_or(1U), *Result.Context};
-  Visitor.TraverseStmt(const_cast<Stmt *>(ForLike));
-
   auto Analyzer = AllMutationsFinder(*Scope, *Result.Context);
-  for (const ValueDecl *const Var : Visitor.IterLoopVars) {
-    for (const auto *const MutationStmt : Analyzer.findAllMutations(Var))
-      diag(MutationStmt->getBeginLoc(),
-           "do not mutate the variable %0 used as the for statement counter "
+
+  llvm::SmallPtrSet<const ValueDecl *, 4> Counters = {};
+
+  for (const Expr *E : LoopDirective->counters())
+    if (const auto *const DRef =
+            llvm::dyn_cast<DeclRefExpr>(E->IgnoreImpCasts()))
+      Counters.insert(DRef->getDecl());
+
+  for (const Expr *E : LoopDirective->dependent_counters())
+    if (const auto *const DRef =
+            llvm::dyn_cast_if_present<DeclRefExpr>(E->IgnoreImpCasts()))
+      Counters.insert(DRef->getDecl());
+
+  for (const ValueDecl *Counter : Counters) {
+    for (const Stmt *const Mutation : Analyzer.findAllMutations(Counter))
+      diag(Mutation->getBeginLoc(),
+           "do not mutate the variable '%0' used as the for statement counter "
            "of the OpenMP work-sharing construct")
-          << MutationStmt->getSourceRange() << Var;
+          << Mutation->getSourceRange()
+          << tooling::fixit::getText(*Mutation, *Result.Context);
   }
 
-  for (const auto &[ValDecl, Refs] : Visitor.IterConditionVars) {
-    for (const auto *const MutationStmt : Analyzer.findAllMutations(ValDecl)) {
+  DeclRefExprInForConditionFinder Visitor{OptCollapseNum.value_or(1U),
+                                          *Result.Context};
+  Visitor.TraverseStmt(const_cast<Stmt *>(ForLike));
+
+  auto VariablesReferencedInConditions =
+      llvm::set_difference(Visitor.VariablesReferencedInConditions, Counters);
+
+  for (const ValueDecl *Var : VariablesReferencedInConditions) {
+    for (const Stmt *const MutationStmt : Analyzer.findAllMutations(Var)) {
       diag(MutationStmt->getBeginLoc(),
            "do not mutate the variable %0 used in the for statement condition "
            "of the OpenMP work-sharing construct")
-          << MutationStmt->getSourceRange() << ValDecl;
-      for (const DeclRefExpr *const ConditionVarRef : Refs)
-        diag(ConditionVarRef->getLocation(),
-             "variable %0 used in loop condition here",
-             DiagnosticIDs::Level::Note)
-            << ConditionVarRef->getSourceRange() << ValDecl;
+          << MutationStmt->getSourceRange() << Var;
     }
   }
 }
