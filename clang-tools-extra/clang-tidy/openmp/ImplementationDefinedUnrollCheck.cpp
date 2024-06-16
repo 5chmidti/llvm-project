@@ -12,6 +12,8 @@
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 #include "clang/ASTMatchers/ASTMatchers.h"
 #include "clang/ASTMatchers/ASTMatchersMacros.h"
+#include "clang/Basic/Diagnostic.h"
+#include "clang/Basic/DiagnosticIDs.h"
 #include "clang/Basic/SourceLocation.h"
 
 using namespace clang::ast_matchers;
@@ -54,10 +56,15 @@ void ImplementationDefinedUnrollCheck::check(
   }
 
   const auto *Unroll = Result.Nodes.getNodeAs<OMPUnrollDirective>("unroll");
+  const auto Range = SourceRange(Unroll->getBeginLoc(), Unroll->getEndLoc());
   diag(Unroll->getBeginLoc(),
        "not specifying a 'partial' or 'full' clause "
        "will result in implementation defined behavior for the unrolling")
-      << SourceRange(Unroll->getBeginLoc(), Unroll->getEndLoc());
+      << Range;
+
+  diag(Unroll->getBeginLoc(), "add 'full' or specify a partial unroll",
+       DiagnosticIDs::Level::Note)
+      << Range << FixItHint::CreateInsertion(Unroll->getEndLoc(), " full");
 }
 
 } // namespace clang::tidy::openmp
