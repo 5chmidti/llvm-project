@@ -115,8 +115,10 @@ public:
                   expr().bind("expr"), Var,
                   unless(hasParent(cxxOperatorCallExpr(
                       hasOverloadedOperatorName("[]"), hasArgument(0, Var)))),
-                  unless(hasAncestor(forStmt(hasIncrement(
-                      hasDescendant(expr(equalsBoundNode("expr"))))))))),
+                  unless(hasAncestor(forStmt(anyOf(
+                      hasLoopInit(hasDescendant(expr(equalsBoundNode("expr")))),
+                      hasIncrement(
+                          hasDescendant(expr(equalsBoundNode("expr")))))))))),
               Stm, Context);
 
     auto Mutations = llvm::SmallVector<const Stmt *, 4>{};
@@ -159,14 +161,16 @@ void DoNotModifyLoopVariableCheck::check(
   llvm::SmallPtrSet<const ValueDecl *, 4> Counters = {};
 
   for (const Expr *E : LoopDirective->counters())
-    if (const auto *const DRef =
-            llvm::dyn_cast<DeclRefExpr>(E->IgnoreImpCasts()))
-      Counters.insert(DRef->getDecl());
+    if (E)
+      if (const auto *const DRef =
+              llvm::dyn_cast<DeclRefExpr>(E->IgnoreImpCasts()))
+        Counters.insert(DRef->getDecl());
 
   for (const Expr *E : LoopDirective->dependent_counters())
-    if (const auto *const DRef =
-            llvm::dyn_cast_if_present<DeclRefExpr>(E->IgnoreImpCasts()))
-      Counters.insert(DRef->getDecl());
+    if (E)
+      if (const auto *const DRef =
+              llvm::dyn_cast<DeclRefExpr>(E->IgnoreImpCasts()))
+        Counters.insert(DRef->getDecl());
 
   for (const ValueDecl *Counter : Counters) {
     for (const Stmt *const Mutation : Analyzer.findAllMutations(Counter))
