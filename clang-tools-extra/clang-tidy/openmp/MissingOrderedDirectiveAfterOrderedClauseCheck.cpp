@@ -9,11 +9,9 @@
 #include "MissingOrderedDirectiveAfterOrderedClauseCheck.h"
 #include "clang/AST/Decl.h"
 #include "clang/AST/OpenMPClause.h"
-#include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/AST/StmtOpenMP.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 #include "clang/ASTMatchers/ASTMatchers.h"
-#include "llvm/ADT/SmallVector.h"
 
 using namespace clang::ast_matchers;
 
@@ -31,16 +29,13 @@ const ast_matchers::internal::VariadicDynCastAllOfMatcher<OMPClause,
 
 void MissingOrderedDirectiveAfterOrderedClauseCheck::registerMatchers(
     MatchFinder *Finder) {
-  Finder->addMatcher(
-      ompExecutableDirective(
-          hasAnyClause(ompOrderedClause()),
-          hasAncestor(functionDecl().bind("context")),
-          unless(hasDescendant(ompOrderedDirective(
-              hasAncestor(functionDecl().bind("other")),
-              hasAncestor(functionDecl(equalsBoundNode("context"),
-                                       equalsBoundNode("other")))))))
-          .bind("dir-with-ordered"),
-      this);
+  Finder->addMatcher(ompExecutableDirective(
+                         hasAnyClause(ompOrderedClause()),
+                         forCallable(functionDecl().bind("context")),
+                         unless(hasDescendant(ompOrderedDirective(forCallable(
+                             functionDecl(equalsBoundNode("context")))))))
+                         .bind("dir-with-ordered"),
+                     this);
 }
 
 void MissingOrderedDirectiveAfterOrderedClauseCheck::check(
