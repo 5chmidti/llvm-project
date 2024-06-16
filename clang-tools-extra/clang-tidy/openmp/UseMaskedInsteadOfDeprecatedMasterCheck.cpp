@@ -31,7 +31,7 @@ void UseMaskedInsteadOfDeprecatedMasterCheck::check(
     const MatchFinder::MatchResult &Result) {
   const auto *Master = Result.Nodes.getNodeAs<OMPMasterDirective>("master");
   diag(Master->getBeginLoc(), "the 'master' directive is deprecated since "
-                              "OpenMP 5.2; use the 'masked' directive instead")
+                              "OpenMP 5.1; use the 'masked' directive instead")
       << FixItHint::CreateReplacement(Master->getSourceRange(),
                                       "#pragma omp masked");
 }
