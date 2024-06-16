@@ -58,10 +58,12 @@ void MissingForInParallelDirectiveBeforeForLoopCheck::registerMatchers(
 void MissingForInParallelDirectiveBeforeForLoopCheck::check(
     const MatchFinder::MatchResult &Result) {
   const auto *Parallel = Result.Nodes.getNodeAs<OMPParallelDirective>("omp");
-  diag(Parallel->getBeginLoc(),
-       "OpenMP `parallel` directive does not "
-       "contain work-sharing construct `for`, but "
-       "for loop is the next statement; add `for` to the directive")
+  diag(Parallel->getBeginLoc(), "OpenMP `parallel` directive does not "
+                                "contain work-sharing construct `for`, but "
+                                "for loop is the next statement")
+      << Parallel->getSourceRange();
+  diag(Parallel->getBeginLoc(), "add 'for' to the directive",
+       DiagnosticIDs::Level::Note)
       << Parallel->getSourceRange()
       << FixItHint::CreateInsertion(
              getEndOfParallelWord(Parallel->getBeginLoc(),
