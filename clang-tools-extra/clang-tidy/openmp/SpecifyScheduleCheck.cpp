@@ -46,9 +46,10 @@ AST_MATCHER(OMPScheduleClause, isAutoKind) {
   return Node.getScheduleKind() == OpenMPScheduleClauseKind::OMPC_SCHEDULE_auto;
 }
 
-AST_MATCHER_P(OMPScheduleClause, hasScheduleKind, OpenMPScheduleClauseKind,
-              Kind) {
-  return Node.getScheduleKind() == Kind;
+AST_MATCHER(OMPScheduleClause, isStaticWithoutChunkSize) {
+  return Node.getScheduleKind() ==
+             OpenMPScheduleClauseKind::OMPC_SCHEDULE_static &&
+         Node.getChunkSize() == nullptr;
 }
 // NOLINTEND(readability-identifier-naming)
 } // namespace
@@ -68,15 +69,15 @@ void SpecifyScheduleCheck::registerMatchers(MatchFinder *Finder) {
       ompExecutableDirective(
           isOMPForDirective(),
           optionally(ast_matchers::hasAnyClause(
-              ompScheduleClause(unless(isAutoKind())).bind("schedule"))),
-          ast_matchers::hasAnyClause(ompOrderedClause()))
+              ompScheduleClause(isStaticWithoutChunkSize()).bind("schedule"))),
+          ast_matchers::hasAnyClause(ompOrderedClause().bind("ordered")))
           .bind("directive-ordered"),
       this);
 }
 
 void SpecifyScheduleCheck::check(const MatchFinder::MatchResult &Result) {
-  if (const auto *DirectiveOrdered =
-          Result.Nodes.getNodeAs<OMPExecutableDirective>("directive-ordered")) {
+  if (Result.Nodes.getNodeAs<OMPExecutableDirective>("directive-ordered")) {
+    const auto *Ordered = Result.Nodes.getNodeAs<OMPOrderedClause>("ordered");
     if (const auto *Schedule =
             Result.Nodes.getNodeAs<OMPScheduleClause>("schedule");
         Schedule &&
@@ -84,11 +85,12 @@ void SpecifyScheduleCheck::check(const MatchFinder::MatchResult &Result) {
             OpenMPScheduleClauseKind::OMPC_SCHEDULE_static &&
         !Schedule->getChunkSize()) {
       diag(
-          DirectiveOrdered->getBeginLoc(),
+          Schedule->getBeginLoc(),
           "specify the chunk-size for the 'static' schedule to avoid executing "
           "chunks that are too large which may lead to serialized execution "
           "due to the 'ordered' clause")
-          << DirectiveOrdered->getSourceRange();
+          << SourceRange(Schedule->getBeginLoc(), Schedule->getEndLoc())
+          << SourceRange(Ordered->getBeginLoc(), Ordered->getEndLoc());
     }
     return;
   }
@@ -98,7 +100,7 @@ void SpecifyScheduleCheck::check(const MatchFinder::MatchResult &Result) {
 
   if (const auto *Schedule =
           Result.Nodes.getNodeAs<OMPScheduleClause>("auto-schedule")) {
-    diag(Directive->getBeginLoc(),
+    diag(Schedule->getBeginLoc(),
          "the 'auto' scheduling kind results in an implementation defined "
          "schedule, which may not fit the work distribution across iterations")
         << SourceRange(Schedule->getBeginLoc(), Schedule->getEndLoc());
