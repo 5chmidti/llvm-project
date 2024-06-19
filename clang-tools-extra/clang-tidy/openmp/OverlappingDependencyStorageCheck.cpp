@@ -14,7 +14,6 @@
 #include "clang/AST/ExprOpenMP.h"
 #include "clang/AST/OpenMPClause.h"
 #include "clang/AST/RecursiveASTVisitor.h"
-#include "clang/AST/StmtOpenMP.h"
 #include "clang/AST/Type.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 #include "clang/ASTMatchers/ASTMatchers.h"
@@ -45,18 +44,19 @@ public:
 
   explicit OverlappingDependencyFinder(const ASTContext &Ctx) : Ctx(Ctx) {}
 
-  bool TraverseOMPTaskDirective(OMPTaskDirective *TD) {
-    for (const auto *const Depend : TD->getClausesOfKind<OMPDependClause>()) {
-      for (const Expr *const Var : Depend->getVarRefs()) {
-        if (const auto *const ArraySection =
-                llvm::dyn_cast<OMPArraySectionExpr>(Var))
-          saveInfo(ArraySection);
-        else if (const auto *const DRef = llvm::dyn_cast<DeclRefExpr>(Var))
-          saveInfo(DRef);
-      }
+  bool TraverseOMPClause(OMPClause *Clause) {
+    const auto *const Depend = llvm::dyn_cast<OMPDependClause>(Clause);
+    if (!Depend)
+      return true;
+    for (const Expr *const Var : Depend->getVarRefs()) {
+      if (const auto *const ArraySection =
+              llvm::dyn_cast<OMPArraySectionExpr>(Var))
+        saveInfo(ArraySection);
+      else if (const auto *const DRef = llvm::dyn_cast<DeclRefExpr>(Var))
+        saveInfo(DRef);
     }
 
-    return Base::TraverseStmt(TD->getStructuredBlock());
+    return true;
   }
 
   std::map<const ValueDecl *, llvm::SmallVector<SectionInfo>> Results;
