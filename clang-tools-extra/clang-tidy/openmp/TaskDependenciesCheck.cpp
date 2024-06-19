@@ -9,8 +9,10 @@
 #include "TaskDependenciesCheck.h"
 #include "../utils/ASTUtils.h"
 #include "clang/AST/Expr.h"
+#include "clang/AST/ExprCXX.h"
 #include "clang/AST/ExprOpenMP.h"
 #include "clang/AST/OpenMPClause.h"
+#include "clang/AST/OperationKinds.h"
 #include "clang/AST/Stmt.h"
 #include "clang/AST/StmtOpenMP.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
@@ -18,10 +20,12 @@
 #include "clang/ASTMatchers/ASTMatchersMacros.h"
 #include "clang/Analysis/Analyses/ExprMutationAnalyzer.h"
 #include "clang/Basic/OpenMPKinds.h"
+#include "clang/Basic/OperatorKinds.h"
 #include "clang/Tooling/FixIt.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Casting.h"
+#include <type_traits>
 
 using namespace clang::ast_matchers;
 
@@ -34,6 +38,25 @@ const ast_matchers::internal::VariadicDynCastAllOfMatcher<Stmt,
 
 AST_MATCHER_P(Stmt, isIdenticalTo, const Stmt *, Other) {
   return utils::areStatementsIdentical(&Node, Other, Finder->getASTContext());
+}
+
+bool isAssignmentOnlyOperator(const BinaryOperator &Op) {
+  return Op.getOpcode() == BinaryOperator::Opcode::BO_Assign;
+}
+
+bool isAssignmentOnlyOperator(const CXXOperatorCallExpr &Op) {
+  return Op.getOperator() == OverloadedOperatorKind::OO_Equal;
+}
+
+bool isAssignmentOnlyOperator(const CXXRewrittenBinaryOperator &Op) {
+  return Op.getOpcode() == BinaryOperator::Opcode::BO_Assign;
+}
+
+AST_POLYMORPHIC_MATCHER(
+    isAssignmentOnlyOperator,
+    AST_POLYMORPHIC_SUPPORTED_TYPES(BinaryOperator, CXXOperatorCallExpr,
+                                    CXXRewrittenBinaryOperator)) {
+  return isAssignmentOnlyOperator(Node);
 }
 
 void TaskDependenciesCheck::registerMatchers(MatchFinder *Finder) {
@@ -135,7 +158,7 @@ void TaskDependenciesCheck::check(const MatchFinder::MatchResult &Result) {
                      isIdenticalTo(VarRef), expr().bind("expr"),
                      optionally(hasAncestor(
                          binaryOperation(
-                             isAssignmentOperator(),
+                             isAssignmentOnlyOperator(),
                              hasLHS(anyOf(
                                  expr(equalsBoundNode("expr")),
                                  hasDescendant(expr(equalsBoundNode("expr"))))))
