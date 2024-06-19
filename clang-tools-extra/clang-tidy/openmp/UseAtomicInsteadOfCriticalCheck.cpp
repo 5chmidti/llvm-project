@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "UseAtomicInsteadOfCriticalCheck.h"
+#include "../utils/Matchers.h"
 #include "../utils/OpenMP.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/Decl.h"
@@ -71,6 +72,12 @@ AST_MATCHER(BinaryOperator, isAllowedCompoundOperator) {
   default:
     return false;
   }
+}
+
+AST_MATCHER(BinaryOperator, isAllowedOrderingOperator) {
+  const auto Code = Node.getOpcode();
+  return Code == BinaryOperator::Opcode::BO_LT ||
+         Code == BinaryOperator::Opcode::BO_GT;
 }
 
 AST_MATCHER(CompoundStmt, hasSingleStatement) { return Node.size() == 1U; }
@@ -141,6 +148,20 @@ AST_MATCHER_P(OMPExecutableDirective, hasSharedVariable,
     return true;
 
   return false;
+}
+
+AST_MATCHER_P2(CompoundStmt, withOrderedSubStmt,
+               ast_matchers::internal::Matcher<Stmt>, First,
+               ast_matchers::internal::Matcher<Stmt>, Second) {
+  if (Node.size() != 2)
+    return false;
+
+  return First.matches(*Node.body_front(), Finder, Builder) &&
+         Second.matches(*Node.body_back(), Finder, Builder);
+}
+
+AST_MATCHER(QualType, isIntegral) {
+  return Node->isIntegralType(Finder->getASTContext());
 }
 
 enum class AtomicKind : std::uint8_t {
@@ -221,22 +242,62 @@ DiagnosticData getAtomicDirective(const BoundNodes &Result) {
   return {};
 }
 
-auto referencesX() { return declRefExpr(declRefExpr(to(varDecl().bind("x")))); }
-auto referencesV() {
-  return declRefExpr(unless(equalsBoundNode("x"))).bind("v");
+// TODO:
+//
+// - During the execution of an atomic region, multiple syntactic occurrences of
+// expr must evaluate to the same value.
+//
+// - In forms that capture the original value of x in v, v and e may not refer
+// to, or access, the same storage location.
+
+auto isVXRD(bool V = true, bool X = true, bool R = true, bool D = true) {
+  return varDecl(
+      anyOf(V ? varDecl(equalsBoundNode("v")) : varDecl(unless(anything())),
+            V ? varDecl(equalsBoundNode("x")) : varDecl(unless(anything())),
+            V ? varDecl(equalsBoundNode("r")) : varDecl(unless(anything())),
+            V ? varDecl(equalsBoundNode("d")) : varDecl(unless(anything()))));
 }
-auto expression() { return expr(unless(equalsBoundNode("v"))); }
+
+auto declareX() {
+  return declRefExpr(
+      to(varDecl(unless(isVXRD(true, false, true, true))).bind("x")));
+}
+auto referencesX() { return declRefExpr(to(equalsBoundNode("x"))); }
+
+auto declareV() {
+  return declRefExpr(to(unless(equalsBoundNode("x")))).bind("v");
+}
+
+auto declareD() {
+  return declRefExpr(
+      to(varDecl(unless(isVXRD(true, true, true, false))).bind("d")));
+}
+
+auto declareE() { return declRefExpr(to(varDecl().bind("e"))); }
+
+auto declareR() {
+  return declRefExpr(
+      hasType(isIntegral()),
+      to(varDecl(unless(isVXRD(true, true, false, true))).bind("r")));
+}
+auto referenceR() { return declRefExpr(to(equalsBoundNode("r"))); }
+
+auto declareExpression() {
+  return expr(unless(declRefExpr(to(isVXRD()))),
+              unless(hasDescendant(declRefExpr(to(isVXRD())))));
+}
+auto referenceExpression() { return declareExpression(); }
 
 // v = x;
-auto atomicRead() {
-  return binaryOperator(isAssignmentOperator(), hasRHS(referencesX()),
-                        hasLHS(referencesV()));
+auto readAtomic() {
+  return binaryOperator(isAssignmentOperator(), hasRHS(declareX()),
+                        hasLHS(declareV()));
 }
 
 // x = expr;
-auto atomicWrite() {
-  return binaryOperator(isAssignmentOperator(), hasLHS(referencesX()),
-                        hasRHS(expression()));
+auto writeAtomic() {
+  return binaryOperator(isAssignmentOperator(), hasLHS(declareX()),
+                        hasRHS(declareExpression()));
 }
 
 // x++;
@@ -246,55 +307,107 @@ auto atomicWrite() {
 // x binop= expr;
 // x = x binop expr;
 // x = expr binop x;
-auto atomicUpdate() {
+auto updateStmt() {
   return expr(anyOf(
       unaryOperator(hasAnyOperatorName("++", "--"),
-                    hasUnaryOperand(referencesX())),
-      binaryOperator(hasOperatorName("="), hasLHS(referencesX()),
-                     hasRHS(binaryOperator(
-                         isAllowedBinaryOperator(),
-                         hasOperands(equalsBoundNode("x"), expression())))),
-      compoundAssignOperator(isAllowedCompoundOperator(), hasLHS(referencesX()),
-                             hasRHS(expression()))));
+                    hasUnaryOperand(declareX())),
+      binaryOperator(hasOperatorName("="), hasLHS(declareX()),
+                     hasRHS(binaryOperator(isAllowedBinaryOperator(),
+                                           hasOperands(equalsBoundNode("x"),
+                                                       declareExpression())))),
+      compoundAssignOperator(isAllowedCompoundOperator(), hasLHS(declareX()),
+                             hasRHS(declareExpression()))));
 }
 
-// v = x++;
-// v = x--;
-// v = ++x;
-// v = --x;
-// v = x binop= expr;
-// v = x = x binop expr;
-// v = x = expr binop x;
-// -----------------------
-// { v = x; x binop= expr; }
-// { v = x; x = x binop expr; }
-// { v = x; x = expr binop x; }
-// { v = x; x = expr; }
-// { v = x; x++; }
-// { v = x; ++x; }
-// { v = x; x--; }
-// { v = x; --x; }
-// ----------------------
-// { x = x binop expr; v = x; }
-// { x = expr binop x; v = x; }
-// { x binop= expr; v = x; }
-// { ++x; v = x; }
-// { x++; v = x; }
-// { --x; v = x; }
-// { x--; v = x; }
-auto atomicCapture() {
-  return stmt(anyOf(
-      binaryOperator(hasOperatorName("="), hasRHS(atomicUpdate()),
-                     hasLHS(referencesV())),
-      compoundStmt(hasStatements(
-          atomicRead(), binaryOperator(anyOf(atomicWrite(), atomicUpdate())))),
-      compoundStmt(hasStatements(atomicUpdate(), atomicRead()))));
+// x = expr ordop x ? expr : x;
+// x = x ordop expr ? expr : x;
+// x = x == e ? d : x;
+auto conditionalUpdateAtomic() {
+  return binaryOperator(
+      hasOperatorName("="), hasLHS(declareX()),
+      hasRHS(expr(anyOf(
+          conditionalOperator(
+              hasCondition(
+                  binaryOperator(isAllowedOrderingOperator(),
+                                 hasOperands(declareX(), declareExpression()))),
+              hasTrueExpression(referenceExpression()),
+              hasFalseExpression(referencesX())),
+          conditionalOperator(hasCondition(binaryOperator(
+                                  matchers::isEqualityOperator(),
+                                  hasLHS(declareX()), hasRHS(declareE()))),
+                              hasTrueExpression(declareD()),
+                              hasFalseExpression(referencesX()))))));
+}
+
+auto updateAtomic() {
+  return expr(anyOf(updateStmt(), conditionalUpdateAtomic()));
+}
+
+// if (expr ordop x) { x = expr; }
+// if (x ordop expr) { x = expr; }
+// if (x == e) { x = d; }
+auto condUpdateStmt() {
+  return ifStmt(anyOf(
+      ifStmt(hasCondition(expr(binaryOperator(isAllowedOrderingOperator(),
+                                              hasEitherOperand(declareX())))),
+             has(compoundStmt(
+                 has(binaryOperator(hasOperatorName("="), hasLHS(referencesX()),
+                                    hasRHS(declareExpression())))))),
+      ifStmt(
+          hasCondition(binaryOperator(matchers::isEqualityOperator(),
+                                      hasLHS(declareX()), hasRHS(declareE()))),
+          has(compoundStmt(
+              has(binaryOperator(hasOperatorName("="), hasLHS(referencesX()),
+                                 hasRHS(declareD()))))))));
+}
+
+// FIXME: recheck all atomic definitions
+
+// v = expr-stmt;
+// { v = x; expr-stmt; }
+// { expr-stmt; v = x; }
+auto captureStmt() {
+  const auto ExprStmt = expr(anyOf(readAtomic(), writeAtomic(), updateAtomic(),
+                                   conditionalUpdateAtomic()));
+  return stmt(
+      anyOf(binaryOperator(hasOperatorName("="), hasRHS(ExprStmt),
+                           hasLHS(declareV())),
+            compoundStmt(hasStatements(readAtomic(), binaryOperator(ExprStmt))),
+            compoundStmt(hasStatements(ExprStmt, readAtomic()))));
+}
+
+// { cond-update-stmt v = x; }
+// if (x == e) { x = d; } else { v = x; }
+// { r = x == e; if (r) { x = d; } }
+// { r = x == e; if (r) { x = d; } else { v = x; } }
+auto conditionalUpdateCaptureAtomic() {
+  const auto XEqualsE = binaryOperator(matchers::isEqualityOperator(),
+                                       hasLHS(declareX()), hasRHS(declareE()));
+
+  const auto AssignDToX = binaryOperator(
+      hasOperatorName("="), hasLHS(referencesX()), hasRHS(declareD()));
+
+  return expr(anyOf(
+      compoundStmt(withOrderedSubStmt(condUpdateStmt(), readAtomic())),
+      ifStmt(ifStmt(hasCondition(XEqualsE)),
+             hasThen(compoundStmt(has(AssignDToX))),
+             hasElse(compoundStmt(has(readAtomic())))),
+      compoundStmt(withOrderedSubStmt(
+          binaryOperator(hasOperatorName("="), hasLHS(declareR()),
+                         hasRHS(XEqualsE)),
+          ifStmt(hasCondition(referenceR()),
+                 hasThen(compoundStmt(has(AssignDToX))),
+                 unless(hasElse(unless(compoundStmt(has(readAtomic()))))))))));
+}
+
+auto captureAtomic() {
+  return expr(anyOf(captureStmt(), conditionalUpdateCaptureAtomic()));
 }
 
 auto atomicOperation() {
-  return stmt(anyOf(atomicRead().bind("read"), atomicWrite().bind("write"),
-                    atomicUpdate().bind("update"),
-                    atomicCapture().bind("capture")))
+  return stmt(anyOf(readAtomic().bind("read"), writeAtomic().bind("write"),
+                    updateAtomic().bind("update"),
+                    captureAtomic().bind("capture")))
       .bind("operation");
 }
 
