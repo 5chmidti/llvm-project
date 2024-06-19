@@ -14,6 +14,7 @@
 #include "clang/AST/Expr.h"
 #include "clang/AST/ExprCXX.h"
 #include "clang/AST/OperationKinds.h"
+#include "clang/AST/Stmt.h"
 #include "clang/AST/StmtOpenMP.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 #include "clang/ASTMatchers/ASTMatchers.h"
@@ -22,6 +23,8 @@
 #include "clang/Basic/DiagnosticIDs.h"
 #include "clang/Basic/OpenMPKinds.h"
 #include "clang/Basic/OperatorKinds.h"
+#include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
@@ -229,6 +232,11 @@ AST_MATCHER(OMPExecutableDirective, isLoopDirective) {
   return isOpenMPLoopDirective(Node.getDirectiveKind());
 }
 
+AST_MATCHER_P(DeclRefExpr, equalsAnyNode, llvm::ArrayRef<const DeclRefExpr *>,
+              Nodes) {
+  return llvm::is_contained(Nodes, &Node);
+}
+
 void UseReductionCheck::registerMatchers(MatchFinder *Finder) {
   // FIXME: Add matchers.
   Finder->addMatcher(
@@ -252,39 +260,62 @@ void UseReductionCheck::check(const MatchFinder::MatchResult &Result) {
 
   std::map<const ValueDecl *, ReductionInfo> Reductions{};
 
-  for (const ast_matchers::BoundNodes &M :
-       match(findAll(traverse(
-                 TK_IgnoreUnlessSpelledInSource,
-                 mapAnyOf(ompAtomicDirective, ompCriticalDirective)
-                     .with(has(binaryOperation(anyOf(
-                         binaryOperation(
-                             isAssignmentOperator(),
-                             hasLHS(declRefExpr(to(varDecl().bind("var")))
-                                        .bind("dref")),
-                             hasRHS(binaryOperation(
-                                        isReductionOperator(),
-                                        unless(isCompoundReductionOperator()))
-                                        .bind("reduction"))),
-                         binaryOperation(
-                             isCompoundReductionOperator(),
-                             hasLHS(declRefExpr(to(varDecl().bind("var")))
-                                        .bind("dref")))
-                             .bind("reduction")))))
-                     .bind("access-directive"))),
-             *Directive->getStructuredBlock(), Ctx)) {
+  for (const ast_matchers::BoundNodes &M : match(
+           findAll(traverse(
+               TK_IgnoreUnlessSpelledInSource,
+               mapAnyOf(ompAtomicDirective, ompCriticalDirective)
+                   .with(has(binaryOperation(anyOf(
+                       binaryOperation(
+                           isAssignmentOperator(),
+                           hasLHS(declRefExpr(to(varDecl().bind("var")))
+                                      .bind("dref")),
+                           hasRHS(
+                               binaryOperation(
+                                   isReductionOperator(),
+                                   unless(isCompoundReductionOperator()),
+                                   hasEitherOperand(
+                                       declRefExpr(
+                                           to(varDecl(equalsBoundNode("var"))))
+                                           .bind("rhs-dref")))
+                                   .bind("reduction"))),
+                       binaryOperation(
+                           isCompoundReductionOperator(),
+                           hasLHS(declRefExpr(to(varDecl().bind("var")))
+                                      .bind("dref")))
+                           .bind("reduction")))))
+                   .bind("access-directive"))),
+           *Directive->getStructuredBlock(), Ctx)) {
     const auto *DRef = M.getNodeAs<DeclRefExpr>("dref");
+    const auto *RhsDRef = M.getNodeAs<DeclRefExpr>("rhs-dref");
     const auto *Var = M.getNodeAs<VarDecl>("var");
     const auto *Op = M.getNodeAs<Expr>("reduction");
-    Reductions[Var].Reductions.insert(translateToReductionKind(Op));
-    Reductions[Var].References.push_back(DRef);
+
+    auto &Info = Reductions[Var];
+    Info.Reductions.insert(translateToReductionKind(Op));
+    Info.References.push_back(DRef);
+    if (RhsDRef)
+      Info.References.push_back(RhsDRef);
 
     // When a reduction is inside an atomic directive, then the other variable
     // inside the atomic cannot be shared as per the atomic definition (access
     // to ONE storage location is atomic). Therefore, we save the atomic
     // directive for removal with a fix-it hint.
-    Reductions[Var].AccessDirectives.insert(
+    Info.AccessDirectives.insert(
         M.getNodeAs<OMPExecutableDirective>("access-directive"));
   }
+
+  llvm::SmallVector<const ValueDecl *> ToRemove;
+
+  for (const auto &[Var, Info] : Reductions)
+    if (!match(findAll(declRefExpr(to(varDecl(equalsNode(Var))),
+                                   unless(equalsAnyNode(Info.References)))
+                           .bind("dref")),
+               *Directive->getStructuredBlock(), Ctx)
+             .empty())
+      ToRemove.push_back(Var);
+
+  for (const ValueDecl *Var : ToRemove)
+    Reductions.erase(Var);
 
   for (const auto &[Var, Info] : Reductions) {
     const ReductionKind Reduction = *Info.Reductions.begin();

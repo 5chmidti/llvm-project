@@ -1,5 +1,7 @@
 // RUN: %check_clang_tidy %s openmp-use-reduction %t -- --extra-arg=-fopenmp
 
+void sink(int);
+
 void test() {
     int Sum = 0;
     #pragma omp parallel for
@@ -36,6 +38,21 @@ void test() {
         #pragma omp critical
             Sum = i + Sum;
 // CHECK-MESSAGES: :[[@LINE-4]]:5: warning: prefer to use a 'reduction' clause with '+' for 'Sum' [openmp-use-reduction]
+
+    #pragma omp parallel
+    #pragma omp for
+    for (int i = 0; i < 10; ++i)
+        #pragma omp critical
+            Sum = i + Sum + i + i + i;
+
+    #pragma omp parallel
+    #pragma omp for
+    for (int i = 0; i < 10; ++i) {
+        #pragma omp critical
+            sink(Sum);
+        #pragma omp critical
+            Sum = i + Sum;
+    }
 
     #pragma omp parallel
     {
