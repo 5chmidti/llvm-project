@@ -13,9 +13,7 @@
 #include "clang/AST/Decl.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/OpenMPClause.h"
-#include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/AST/Stmt.h"
-#include "clang/AST/StmtCXX.h"
 #include "clang/AST/StmtOpenMP.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 #include "clang/ASTMatchers/ASTMatchers.h"
@@ -24,10 +22,8 @@
 #include "clang/Basic/Diagnostic.h"
 #include "clang/Basic/DiagnosticIDs.h"
 #include "clang/Basic/OpenMPKinds.h"
-#include "llvm/ADT/APSInt.h"
 #include "llvm/Support/Casting.h"
 #include <cstddef>
-#include <optional>
 #include <string>
 #include <vector>
 
@@ -40,8 +36,6 @@ using internal::VariadicDynCastAllOfMatcher;
 
 // NOLINTBEGIN(readability-identifier-naming)
 const VariadicDynCastAllOfMatcher<Stmt, OMPLoopDirective> ompLoopDirective;
-const VariadicDynCastAllOfMatcher<OMPClause, OMPCollapseClause>
-    ompCollapseClause;
 // NOLINTEND(readability-identifier-naming)
 
 AST_MATCHER_P(OMPExecutableDirective, hasAssociatedStmt, Matcher<Stmt>,
@@ -52,17 +46,6 @@ AST_MATCHER_P(OMPExecutableDirective, hasAssociatedStmt, Matcher<Stmt>,
 
 AST_MATCHER_P(Stmt, ignoringContainers, Matcher<Stmt>, InnerMatcher) {
   return InnerMatcher.matches(*Node.IgnoreContainers(true), Finder, Builder);
-}
-
-std::optional<size_t> getOptCollapseNum(const OMPCollapseClause *const Collapse,
-                                        const ASTContext &Ctx) {
-  if (!Collapse)
-    return std::nullopt;
-  const Expr *const E = Collapse->getNumForLoops();
-  const std::optional<llvm::APSInt> OptInt = E->getIntegerConstantExpr(Ctx);
-  if (OptInt)
-    return OptInt->tryExtValue();
-  return std::nullopt;
 }
 
 std::string
@@ -77,47 +60,6 @@ getValueDeclsList(const std::vector<const ValueDecl *> &IterVarDecls) {
   }
   return Str;
 }
-
-llvm::SmallVector<const DeclRefExpr *, 4>
-getIterationVariableOfDirectiveForStmts(const Stmt *const FirstForLike,
-                                        const size_t NumLoopsToCheck,
-                                        ASTContext &Ctx) {
-  class IterVarsOfRawForStmtsFromCollapsedLoopDirective
-      : public RecursiveASTVisitor<
-            IterVarsOfRawForStmtsFromCollapsedLoopDirective> {
-  public:
-    IterVarsOfRawForStmtsFromCollapsedLoopDirective(size_t NumLoopsToCheck,
-                                                    ASTContext &Ctx)
-        : NumLoopsToCheck(NumLoopsToCheck), Ctx(Ctx) {}
-
-    bool VisitForStmt(ForStmt *For) {
-      const auto MatchResult = match(AssignOnlyLoopVar, *For->getInit(), Ctx);
-      for (const auto &V : MatchResult)
-        Result.push_back(V.getNodeAs<DeclRefExpr>("dref"));
-
-      --NumLoopsToCheck;
-      return NumLoopsToCheck != 0U;
-    }
-
-    bool VisitCXXForRangeStmt(CXXForRangeStmt *For) {
-      --NumLoopsToCheck;
-      return NumLoopsToCheck != 0U;
-    }
-
-    size_t NumLoopsToCheck;
-    llvm::SmallVector<const DeclRefExpr *, 4> Result{};
-    ASTContext &Ctx;
-    ast_matchers::internal::BindableMatcher<Stmt> AssignOnlyLoopVar =
-        binaryOperator(isAssignmentOperator(),
-                       hasLHS(declRefExpr().bind("dref")));
-  };
-
-  IterVarsOfRawForStmtsFromCollapsedLoopDirective Visitor{NumLoopsToCheck, Ctx};
-  if (FirstForLike)
-    Visitor.TraverseStmt(const_cast<Stmt *>(FirstForLike));
-
-  return Visitor.Result;
-}
 } // namespace
 
 void DeclareLoopIterationVariableInForInitStatementCheck::registerMatchers(
@@ -125,8 +67,7 @@ void DeclareLoopIterationVariableInForInitStatementCheck::registerMatchers(
   Finder->addMatcher(
       ompLoopDirective(
           hasAssociatedStmt(ignoringContainers(
-              stmt(anyOf(forStmt(), cxxForRangeStmt())).bind("for-like"))),
-          optionally(hasAnyClause(ompCollapseClause().bind("collapse"))))
+              stmt(anyOf(forStmt(), cxxForRangeStmt())).bind("for-like"))))
           .bind("directive"),
       this);
 }
@@ -135,15 +76,36 @@ void DeclareLoopIterationVariableInForInitStatementCheck::check(
     const MatchFinder::MatchResult &Result) {
   const auto *const Directive =
       Result.Nodes.getNodeAs<OMPLoopDirective>("directive");
-  const auto *const Collapse =
-      Result.Nodes.getNodeAs<OMPCollapseClause>("collapse");
-  const auto *const ForLike = Result.Nodes.getNodeAs<Stmt>("for-like");
-  const std::optional<size_t> OptCollapseNum =
-      getOptCollapseNum(Collapse, *Result.Context);
 
-  const llvm::SmallVector<const DeclRefExpr *, 4> IterVarsNotDeclaredInInit =
-      getIterationVariableOfDirectiveForStmts(
-          ForLike, OptCollapseNum.value_or(1U), *Result.Context);
+  llvm::SmallVector<const DeclRefExpr *, 4> IterVarsNotDeclaredInInit{};
+  auto &Ctx = *Result.Context;
+
+  const auto AddVarIfDeclaredBeforeForStmt =
+      [&IterVarsNotDeclaredInInit, &Ctx, Directive](const Expr *const Counter) {
+        if (!Counter)
+          return;
+
+        if (const auto *const DRef = llvm::dyn_cast<DeclRefExpr>(Counter)) {
+          const ValueDecl *const Var = DRef->getDecl();
+          // Ignore implicitly generated iteration variables by OpenMP
+          if (Var->isImplicit())
+            return;
+
+          // Ignore variables declared in the for-statement head
+          const auto Matches = match(
+              ompExecutableDirective(
+                  hasDescendant(forStmt(hasLoopInit(declStmt(hasSingleDecl(
+                      valueDecl(hasName(Var->getName())).bind("var"))))))),
+              *Directive, Ctx);
+          if (Matches.empty())
+            IterVarsNotDeclaredInInit.push_back(DRef);
+        }
+      };
+
+  for (const Expr *const Counter : Directive->counters())
+    AddVarIfDeclaredBeforeForStmt(Counter);
+  for (const Expr *E : Directive->dependent_counters())
+    AddVarIfDeclaredBeforeForStmt(E);
 
   if (IterVarsNotDeclaredInInit.empty())
     return;
