@@ -73,3 +73,11 @@ void test8(int arr[]) {
     #pragma omp task depend(out: arr[1:4])
     ;
 }
+
+void test9(int arr[]) {
+    #pragma omp task depend(out: arr[0:4])
+    {
+        #pragma omp task depend(out: arr[2:4])
+        ;
+    }
+}

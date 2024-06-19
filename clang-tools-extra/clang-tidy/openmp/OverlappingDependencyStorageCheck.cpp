@@ -14,6 +14,7 @@
 #include "clang/AST/ExprOpenMP.h"
 #include "clang/AST/OpenMPClause.h"
 #include "clang/AST/RecursiveASTVisitor.h"
+#include "clang/AST/StmtOpenMP.h"
 #include "clang/AST/Type.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 #include "clang/ASTMatchers/ASTMatchers.h"
@@ -42,7 +43,11 @@ public:
     int64_t Stride = 1;
   };
 
-  explicit OverlappingDependencyFinder(const ASTContext &Ctx) : Ctx(Ctx) {}
+  explicit OverlappingDependencyFinder(ClangTidyCheck *Check,
+                                       const ASTContext &Ctx)
+      : Check(Check), Ctx(Ctx) {}
+
+  ~OverlappingDependencyFinder() { maybeDiagnose(Results.back()); }
 
   bool TraverseOMPClause(OMPClause *Clause) {
     const auto *const Depend = llvm::dyn_cast<OMPDependClause>(Clause);
@@ -59,7 +64,20 @@ public:
     return true;
   }
 
-  std::map<const ValueDecl *, llvm::SmallVector<SectionInfo>> Results;
+  bool TraverseOMPTaskDirective(OMPTaskDirective *TD) {
+    for (OMPClause *Clause : TD->clauses())
+      TraverseOMPClause(Clause);
+
+    Results.push_back({});
+    Base::TraverseStmt(TD->getStructuredBlock());
+    maybeDiagnose(Results.back());
+    Results.pop_back();
+    return true;
+  }
+
+  llvm::SmallVector<std::map<const ValueDecl *, llvm::SmallVector<SectionInfo>>,
+                    2>
+      Results{{}};
 
 private:
   void saveInfo(const OMPArraySectionExpr *ArraySection) {
@@ -82,7 +100,7 @@ private:
 
     Info.Stride = evaluate(ArraySection->getStride()).value_or(1);
 
-    Results[Val].push_back(Info);
+    Results.back()[Val].push_back(Info);
   }
   void saveInfo(const DeclRefExpr *DRef) {
     const ValueDecl *const Val = DRef->getDecl();
@@ -93,7 +111,37 @@ private:
             DRef->getType().getCanonicalType().getTypePtr()))
       Info.Length = Array->getSize().getSExtValue();
 
-    Results[Val].push_back(Info);
+    Results.back()[Val].push_back(Info);
+  }
+
+  void maybeDiagnose(
+      const std::map<const ValueDecl *, llvm::SmallVector<SectionInfo>>
+          &SiblingResult) {
+    for (const auto &[E, Sections] : SiblingResult)
+      for (const auto &[Index, LeftSection] : llvm::enumerate(Sections))
+        for (const auto &RightSection : llvm::drop_begin(Sections, Index)) {
+          if (LeftSection.E == RightSection.E ||
+              utils::areStatementsIdentical(LeftSection.E, RightSection.E, Ctx))
+            continue;
+
+          if (LeftSection.LowerBound == RightSection.LowerBound &&
+              LeftSection.Length == RightSection.Length)
+            continue;
+
+          if ((LeftSection.LowerBound + LeftSection.Length) <=
+                  RightSection.LowerBound ||
+              (RightSection.LowerBound + RightSection.Length) <=
+                  LeftSection.LowerBound)
+            continue;
+
+          Check->diag(
+              LeftSection.E->getBeginLoc(),
+              "the array sections '%0' and '%1' have overlapping storage")
+              << LeftSection.E->getSourceRange()
+              << RightSection.E->getSourceRange()
+              << tooling::fixit::getText(*LeftSection.E, Ctx)
+              << tooling::fixit::getText(*RightSection.E, Ctx);
+        }
   }
 
   std::optional<int64_t> evaluate(const Expr *E) {
@@ -105,6 +153,7 @@ private:
     return std::nullopt;
   }
 
+  ClangTidyCheck *Check;
   const ASTContext &Ctx;
 };
 
@@ -117,35 +166,8 @@ void OverlappingDependencyStorageCheck::check(
     const MatchFinder::MatchResult &Result) {
   const auto *const Func = Result.Nodes.getNodeAs<FunctionDecl>("func");
   const auto &Ctx = *Result.Context;
-  OverlappingDependencyFinder Visitor{*Result.Context};
+  OverlappingDependencyFinder Visitor{this, *Result.Context};
   Visitor.TraverseFunctionDecl(const_cast<FunctionDecl *>(Func));
-
-  for (const auto &[E, Sections] : Visitor.Results) {
-    for (const auto &[Index, LeftSection] : llvm::enumerate(Sections)) {
-      for (const auto &RightSection : llvm::drop_begin(Sections, Index)) {
-        if (LeftSection.E == RightSection.E ||
-            utils::areStatementsIdentical(LeftSection.E, RightSection.E, Ctx))
-          continue;
-
-        if (LeftSection.LowerBound == RightSection.LowerBound &&
-            LeftSection.Length == RightSection.Length)
-          continue;
-
-        if ((LeftSection.LowerBound + LeftSection.Length) <=
-                RightSection.LowerBound ||
-            (RightSection.LowerBound + RightSection.Length) <=
-                LeftSection.LowerBound)
-          continue;
-
-        diag(LeftSection.E->getBeginLoc(),
-             "the array sections '%0' and '%1' have overlapping storage")
-            << LeftSection.E->getSourceRange()
-            << RightSection.E->getSourceRange()
-            << tooling::fixit::getText(*LeftSection.E, Ctx)
-            << tooling::fixit::getText(*RightSection.E, Ctx);
-      }
-    }
-  }
 }
 
 } // namespace clang::tidy::openmp
