@@ -165,7 +165,6 @@ void OverlappingDependencyStorageCheck::registerMatchers(MatchFinder *Finder) {
 void OverlappingDependencyStorageCheck::check(
     const MatchFinder::MatchResult &Result) {
   const auto *const Func = Result.Nodes.getNodeAs<FunctionDecl>("func");
-  const auto &Ctx = *Result.Context;
   OverlappingDependencyFinder Visitor{this, *Result.Context};
   Visitor.TraverseFunctionDecl(const_cast<FunctionDecl *>(Func));
 }
