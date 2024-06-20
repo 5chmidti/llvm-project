@@ -337,8 +337,10 @@ void UseReductionCheck::check(const MatchFinder::MatchResult &Result) {
 
     {
       auto Diag = diag(Directive->getBeginLoc(),
-                       "prefer to use a 'reduction' clause with '%0' for %1")
-                  << Directive->getSourceRange() << toString(Reduction) << Var;
+                       "prefer to use a 'reduction(%0 : %1)' clause instead of "
+                       "explicit synchronization for each update")
+                  << Directive->getSourceRange() << toString(Reduction)
+                  << Var->getName();
       if (IsInAtomic)
         Diag << Fixes;
     }
