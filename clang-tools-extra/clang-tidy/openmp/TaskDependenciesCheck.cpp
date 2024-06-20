@@ -6,15 +6,15 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "TaskDependenciesCheck.h"
 #include "../utils/ASTUtils.h"
+#include "TaskDependenciesCheck.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/ExprCXX.h"
 #include "clang/AST/ExprOpenMP.h"
 #include "clang/AST/OpenMPClause.h"
-#include "clang/AST/OperationKinds.h"
 #include "clang/AST/Stmt.h"
 #include "clang/AST/StmtOpenMP.h"
+#include "clang/AST/Type.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 #include "clang/ASTMatchers/ASTMatchers.h"
 #include "clang/ASTMatchers/ASTMatchersMacros.h"
@@ -25,7 +25,6 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Casting.h"
-#include <type_traits>
 
 using namespace clang::ast_matchers;
 
@@ -149,13 +148,15 @@ void TaskDependenciesCheck::check(const MatchFinder::MatchResult &Result) {
       }
 
       if (!llvm::isa<DeclRefExpr, ArraySubscriptExpr>(VarRef)) {
-        VarRef->dump();
         continue;
       }
 
       for (const ast_matchers::BoundNodes &Match :
            match(findAll(expr(
                      isIdenticalTo(VarRef), expr().bind("expr"),
+                     hasAncestor(ompTaskDirective().bind("ancestor-task")),
+                     hasAncestor(ompTaskDirective(
+                         equalsNode(Task), equalsBoundNode("ancestor-task"))),
                      optionally(hasAncestor(
                          binaryOperation(
                              isAssignmentOnlyOperator(),

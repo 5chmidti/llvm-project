@@ -1,7 +1,5 @@
 // RUN: %check_clang_tidy %s openmp-task-dependencies %t -- -- -fopenmp
 
-void awesome_f2();
-
 void f() {
     int Var = 0;
     int Array[100];
@@ -165,3 +163,30 @@ void f() {
         int Other = Array[17];
     }
 }
+
+// contains 'dependencies' to non-sibling tasks, which are wrong of course
+void nested() {
+    int Var = 0;
+
+    #pragma omp task depend(out: Var)
+    {
+        Var = 10;
+        #pragma omp task depend(in: Var)
+        int Other = Var;
+    }
+
+    #pragma omp task depend(out: Var)
+    {
+        Var = 10;
+        #pragma omp task depend(inout: Var)
+        ++Var;
+    }
+
+    #pragma omp task depend(out: Var)
+    {
+        Var = 10;
+        #pragma omp task depend(out: Var)
+        Var = 10;
+    }
+}
+
