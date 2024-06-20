@@ -320,7 +320,7 @@ Clang-Tidy Checks
    :doc:`openmp-do-not-modify-loop-variable <openmp/do-not-modify-loop-variable>`,
    :doc:`openmp-do-not-set-num-threads-in-parallel-region <openmp/do-not-set-num-threads-in-parallel-region>`,
    :doc:`openmp-exception-escape <openmp/exception-escape>`,
-   :doc:`openmp-implementation-defined-unroll <openmp/implementation-defined-unroll>`,
+   :doc:`openmp-implementation-defined-unroll <openmp/implementation-defined-unroll>`, "Yes"
    :doc:`openmp-missing-for-in-parallel-construct-before-for-loop <openmp/missing-for-in-parallel-construct-before-for-loop>`,
    :doc:`openmp-missing-ordered-directive-after-ordered-clause <openmp/missing-ordered-directive-after-ordered-clause>`,
    :doc:`openmp-overlapping-dependency-storage <openmp/overlapping-dependency-storage>`,
