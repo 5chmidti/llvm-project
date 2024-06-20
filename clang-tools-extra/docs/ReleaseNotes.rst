@@ -174,6 +174,11 @@ New checks
 
   FIXME: add release notes.
 
+- New :doc:`openmp-task-dependencies-between-non-sibling-tasks
+  <clang-tidy/checks/openmp/task-dependencies-between-non-sibling-tasks>` check.
+
+  FIXME: add release notes.
+
 - New :doc:`openmp-use-atomic-instead-of-critical
   <clang-tidy/checks/openmp/use-atomic-instead-of-critical>` check.
 

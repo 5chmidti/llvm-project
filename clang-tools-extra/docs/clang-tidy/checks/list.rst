@@ -327,6 +327,7 @@ Clang-Tidy Checks
    :doc:`openmp-recursive-task-without-task-creation-condition <openmp/recursive-task-without-task-creation-condition>`,
    :doc:`openmp-specify-schedule <openmp/specify-schedule>`,
    :doc:`openmp-task-dependencies <openmp/task-dependencies>`,
+   :doc:`openmp-task-dependencies-between-non-sibling-tasks <openmp/task-dependencies-between-non-sibling-tasks>`,
    :doc:`openmp-unprotected-shared-variable-access <openmp/unprotected-shared-variable-access>`,
    :doc:`openmp-use-atomic-instead-of-critical <openmp/use-atomic-instead-of-critical>`, "Yes"
    :doc:`openmp-use-default-none <openmp/use-default-none>`,

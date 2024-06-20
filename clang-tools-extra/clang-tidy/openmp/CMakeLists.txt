@@ -16,6 +16,7 @@ add_clang_library(clangTidyOpenMPModule
   OpenMPTidyModule.cpp
   OverlappingDependencyStorageCheck.cpp
   RecursiveTaskWithoutTaskCreationConditionCheck.cpp
+  TaskDependenciesBetweenNonSiblingTasksCheck.cpp
   TaskDependenciesCheck.cpp
   UseAtomicInsteadOfCriticalCheck.cpp
   SpecifyScheduleCheck.cpp

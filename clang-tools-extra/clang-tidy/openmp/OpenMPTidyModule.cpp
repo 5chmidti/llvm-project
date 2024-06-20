@@ -21,6 +21,7 @@
 #include "OverlappingDependencyStorageCheck.h"
 #include "RecursiveTaskWithoutTaskCreationConditionCheck.h"
 #include "SpecifyScheduleCheck.h"
+#include "TaskDependenciesBetweenNonSiblingTasksCheck.h"
 #include "TaskDependenciesCheck.h"
 #include "UnprotectedSharedVariableAccessCheck.h"
 #include "UseAtomicInsteadOfCriticalCheck.h"
@@ -61,6 +62,8 @@ public:
         "openmp-recursive-task-without-task-creation-condition");
     CheckFactories.registerCheck<TaskDependenciesCheck>(
         "openmp-task-dependencies");
+    CheckFactories.registerCheck<TaskDependenciesBetweenNonSiblingTasksCheck>(
+        "openmp-task-dependencies-between-non-sibling-tasks");
     CheckFactories.registerCheck<UseAtomicInsteadOfCriticalCheck>(
         "openmp-use-atomic-instead-of-critical");
     CheckFactories.registerCheck<SpecifyScheduleCheck>(
