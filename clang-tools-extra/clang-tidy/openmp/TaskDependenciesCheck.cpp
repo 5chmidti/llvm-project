@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "../utils/ASTUtils.h"
 #include "TaskDependenciesCheck.h"
+#include "../utils/ASTUtils.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/ExprCXX.h"
 #include "clang/AST/ExprOpenMP.h"
@@ -138,9 +138,11 @@ void TaskDependenciesCheck::check(const MatchFinder::MatchResult &Result) {
                             DependencyKind))
       continue;
 
-    for (const Expr *VarRef : Depend->getVarRefs()) {
+    for (const Expr *DependExpr : Depend->getVarRefs()) {
       OpenMPDependClauseKind Guess =
           OpenMPDependClauseKind::OMPC_DEPEND_unknown;
+
+      const Expr *VarRef = DependExpr;
 
       if (const auto *ArraySection =
               llvm::dyn_cast<OMPArraySectionExpr>(VarRef)) {
@@ -162,6 +164,8 @@ void TaskDependenciesCheck::check(const MatchFinder::MatchResult &Result) {
                              isAssignmentOnlyOperator(),
                              hasLHS(anyOf(
                                  expr(equalsBoundNode("expr")),
+                                 expr(arraySubscriptExpr(
+                                     hasBase(expr(equalsBoundNode("expr"))))),
                                  hasDescendant(expr(equalsBoundNode("expr"))))))
                              .bind("assign"))))),
                  *Task->getStructuredBlock(), *Result.Context)) {
@@ -182,25 +186,25 @@ void TaskDependenciesCheck::check(const MatchFinder::MatchResult &Result) {
         continue;
 
       if (Guess == OpenMPDependClauseKind::OMPC_DEPEND_inout) {
-        diag(VarRef->getBeginLoc(),
+        diag(DependExpr->getBeginLoc(),
              "the dependency of '%0' is under-specified; use '%1'")
-            << tooling::fixit::getText(*VarRef, *Result.Context)
-            << toStringRef(Guess) << VarRef->getSourceRange();
+            << tooling::fixit::getText(*DependExpr, *Result.Context)
+            << toStringRef(Guess) << DependExpr->getSourceRange();
         continue;
       }
 
       if (DependencyKind == OpenMPDependClauseKind::OMPC_DEPEND_inout &&
           Guess < DependencyKind) {
-        diag(VarRef->getBeginLoc(),
+        diag(DependExpr->getBeginLoc(),
              "the dependency of '%0' is over-specified; use '%1'")
-            << tooling::fixit::getText(*VarRef, *Result.Context)
-            << toStringRef(Guess) << VarRef->getSourceRange();
+            << tooling::fixit::getText(*DependExpr, *Result.Context)
+            << toStringRef(Guess) << DependExpr->getSourceRange();
         continue;
       }
 
-      diag(VarRef->getBeginLoc(), "the dependency of '%0' should be '%1'")
-          << tooling::fixit::getText(*VarRef, *Result.Context)
-          << toStringRef(Guess) << VarRef->getSourceRange();
+      diag(DependExpr->getBeginLoc(), "the dependency of '%0' should be '%1'")
+          << tooling::fixit::getText(*DependExpr, *Result.Context)
+          << toStringRef(Guess) << DependExpr->getSourceRange();
     }
   }
 }

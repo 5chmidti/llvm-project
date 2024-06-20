@@ -118,19 +118,19 @@ void f() {
     }
 
     #pragma omp task depend(out: Array[0:100])
-// CHECK-MESSAGES: :[[@LINE-1]]:34: warning: the dependency of 'Array' is under-specified; use 'inout' [openmp-task-dependencies]
+// CHECK-MESSAGES: :[[@LINE-1]]:34: warning: the dependency of 'Array[0:100]' is under-specified; use 'inout' [openmp-task-dependencies]
     {
         ++Array[10];
     }
 
     #pragma omp task depend(out: Array[0:100])
-// CHECK-MESSAGES: :[[@LINE-1]]:34: warning: the dependency of 'Array' should be 'in' [openmp-task-dependencies]
+// CHECK-MESSAGES: :[[@LINE-1]]:34: warning: the dependency of 'Array[0:100]' should be 'in' [openmp-task-dependencies]
     {
         int Other = Array[11];
     }
 
     #pragma omp task depend(inout: Array[0:100])
-// CHECK-MESSAGES: :[[@LINE-1]]:36: warning: the dependency of 'Array' is over-specified; use 'out' [openmp-task-dependencies]
+// CHECK-MESSAGES: :[[@LINE-1]]:36: warning: the dependency of 'Array[0:100]' is over-specified; use 'out' [openmp-task-dependencies]
     {
         Array[12] = 0;
     }
@@ -141,19 +141,19 @@ void f() {
     }
 
     #pragma omp task depend(inout: Array[0:100])
-// CHECK-MESSAGES: :[[@LINE-1]]:36: warning: the dependency of 'Array' is over-specified; use 'in' [openmp-task-dependencies]
+// CHECK-MESSAGES: :[[@LINE-1]]:36: warning: the dependency of 'Array[0:100]' is over-specified; use 'in' [openmp-task-dependencies]
     {
         int Other = Array[14];
     }
 
     #pragma omp task depend(in: Array[0:100])
-// CHECK-MESSAGES: :[[@LINE-1]]:33: warning: the dependency of 'Array' should be 'out' [openmp-task-dependencies]
+// CHECK-MESSAGES: :[[@LINE-1]]:33: warning: the dependency of 'Array[0:100]' should be 'out' [openmp-task-dependencies]
     {
         Array[15] = 0;
     }
 
     #pragma omp task depend(in: Array[0:100])
-// CHECK-MESSAGES: :[[@LINE-1]]:33: warning: the dependency of 'Array' is under-specified; use 'inout' [openmp-task-dependencies]
+// CHECK-MESSAGES: :[[@LINE-1]]:33: warning: the dependency of 'Array[0:100]' is under-specified; use 'inout' [openmp-task-dependencies]
     {
         ++Array[16];
     }
