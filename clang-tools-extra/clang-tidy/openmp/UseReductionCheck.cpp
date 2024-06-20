@@ -238,7 +238,6 @@ AST_MATCHER_P(DeclRefExpr, equalsAnyNode, llvm::ArrayRef<const DeclRefExpr *>,
 }
 
 void UseReductionCheck::registerMatchers(MatchFinder *Finder) {
-  // FIXME: Add matchers.
   Finder->addMatcher(
       ompExecutableDirective(isLoopDirective(), anyOf(isWorksharingDirective(),
                                                       isParallelDirective()))
