@@ -19,8 +19,10 @@
 #include "clang/Basic/DiagnosticIDs.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
-#include <algorithm>
-#include <vector>
+#include "llvm/ADT/Twine.h"
+#include "llvm/Support/Casting.h"
+#include <iterator>
+#include <map>
 
 using namespace clang::ast_matchers;
 
@@ -33,16 +35,33 @@ const VariadicDynCastAllOfMatcher<Stmt, OMPCriticalDirective>
     ompCriticalDirective;
 // NOLINTEND(readability-identifier-naming)
 
-using CallStackType = llvm::SmallVector<const CallExpr *, 4>;
+using CallStackType = llvm::SmallVector<const CallExpr *>;
+struct CriticalSectionInfo {
+  CriticalSectionInfo(const OMPCriticalDirective *Critical,
+                      CallStackType CallStack)
+      : Critical(Critical), CallStack(std::move(CallStack)) {}
+
+  const OMPCriticalDirective *Critical;
+  CallStackType CallStack;
+  friend bool operator<(const CriticalSectionInfo &Lhs,
+                        const CriticalSectionInfo &Rhs) {
+    if (Lhs.Critical < Rhs.Critical)
+      return true;
+
+    if (Lhs.CallStack.size() < Rhs.CallStack.size())
+      return true;
+
+    return false;
+  }
+};
+
+using NodeMapType =
+    std::map<CriticalSectionInfo, llvm::SmallVector<CriticalSectionInfo>>;
 
 class NestedCriticalSectionOrderingFinder
     : public RecursiveASTVisitor<NestedCriticalSectionOrderingFinder> {
 public:
   using Base = RecursiveASTVisitor<NestedCriticalSectionOrderingFinder>;
-  struct CriticalSectionInfo {
-    const OMPCriticalDirective *Critical;
-    CallStackType CallStack;
-  };
   struct BarrierInfo {
     const OMPBarrierDirective *Barrier;
     size_t IndexOfNextCritical;
@@ -53,48 +72,86 @@ public:
       : Check(Check) {}
 
   bool TraverseOMPCriticalDirective(OMPCriticalDirective *const Critical) {
-    // Mark the ancestor as having at least one child
-    if (!DescendantCriticalDirectiveHasChild.empty())
-      DescendantCriticalDirectiveHasChild.back() = true;
+    if (!CriticalStack.empty()) {
+      Nodes[CriticalStack.back()].emplace_back(
+          Critical, DescendantCriticalDirectiveCallStack);
+    }
 
-    DescendantCriticalDirectiveHasChild.push_back(false);
-    CurrentOrdering.push_back(
-        CriticalSectionInfo{Critical, DescendantCriticalDirectiveCallStack});
+    const DeclarationNameInfo SectionName = Critical->getDirectiveName();
+
+    if (const auto Iter = llvm::find_if(
+            CriticalStack,
+            [&SectionName](const CriticalSectionInfo CriticalInPath) {
+              return CriticalInPath.Critical->getDirectiveName().getName() ==
+                     SectionName.getName();
+            });
+        Iter != CriticalStack.end()) {
+      const CriticalSectionInfo FirstEntered = *Iter;
+      Check->diag(FirstEntered.Critical->getBeginLoc(),
+                  "deadlock while trying to enter a critical section with the "
+                  "same name %0 as the already entered critical section here")
+          << FirstEntered.Critical->getSourceRange() << SectionName.getName();
+
+      size_t CallStackStart = 0U;
+      if (!FirstEntered.CallStack.empty() &&
+          !DescendantCriticalDirectiveCallStack.empty()) {
+        CallStackStart =
+            std::distance(DescendantCriticalDirectiveCallStack.begin(),
+                          llvm::find(DescendantCriticalDirectiveCallStack,
+                                     FirstEntered.CallStack.back()));
+      }
+
+      for (const CallExpr *const C : llvm::drop_begin(
+               DescendantCriticalDirectiveCallStack, CallStackStart)) {
+        Check->diag(C->getBeginLoc(), "then calls %0 here",
+                    DiagnosticIDs::Level::Note)
+            << C->getSourceRange() << C->getCalleeDecl()->getAsFunction();
+      }
+
+      Check->diag(Critical->getBeginLoc(),
+                  "then tries to re-enter the critical section %0 here",
+                  DiagnosticIDs::Level::Note)
+          << Critical->getSourceRange() << SectionName.getName();
+    }
+
+    CriticalStack.emplace_back(Critical, DescendantCriticalDirectiveCallStack);
+
     Base::TraverseOMPCriticalDirective(Critical);
 
-    if (!DescendantCriticalDirectiveHasChild.empty() &&
-        !DescendantCriticalDirectiveHasChild.back())
-      Orderings.push_back(CurrentOrdering);
-
-    CurrentOrdering.pop_back();
-    DescendantCriticalDirectiveHasChild.pop_back();
+    CriticalStack.pop_back();
     return true;
   }
 
   bool TraverseOMPBarrierDirective(OMPBarrierDirective *const Barrier) {
-    if (!CurrentOrdering.empty()) {
-      const auto &[Critical, CallStackOfCritical] = CurrentOrdering.back();
+    if (!CriticalStack.empty()) {
+      const CriticalSectionInfo Critical = CriticalStack.back();
       const DeclarationName CriticalName =
-          Critical->getDirectiveName().getName();
-      const CallExpr *const FirstCall =
-          !CallStackOfCritical.empty()
-              ? CallStackOfCritical.back()
-              : DescendantCriticalDirectiveCallStack.front();
+          Critical.Critical->getDirectiveName().getName();
       Check->diag(
-          FirstCall->getBeginLoc(),
-          "barrier inside critical section %1 "
+          Critical.Critical->getBeginLoc(),
+          "barrier inside critical section %0 "
           "results in a deadlock because not all threads can reach the barrier")
-          << FirstCall->getSourceRange()
-          << FirstCall->getCalleeDecl()->getAsFunction() << CriticalName;
-      Check->diag(Critical->getBeginLoc(),
-                  "barrier encountered while inside critical section %0 here",
-                  DiagnosticIDs::Level::Note)
-          << Critical->getSourceRange() << CriticalName;
-      for (const CallExpr *const C : DescendantCriticalDirectiveCallStack) {
+          << Critical.Critical->getSourceRange() << CriticalName;
+
+      size_t CallStackStart = 0U;
+      if (!Critical.CallStack.empty() &&
+          !DescendantCriticalDirectiveCallStack.empty()) {
+        CallStackStart =
+            std::distance(DescendantCriticalDirectiveCallStack.begin(),
+                          llvm::find(DescendantCriticalDirectiveCallStack,
+                                     Critical.CallStack.back()));
+      }
+
+      for (const CallExpr *const C : llvm::drop_begin(
+               DescendantCriticalDirectiveCallStack, CallStackStart)) {
         Check->diag(C->getBeginLoc(), "barrier is reached by calling %0 here",
                     DiagnosticIDs::Level::Note)
             << C->getSourceRange() << C->getCalleeDecl()->getAsFunction();
       }
+
+      Check->diag(Barrier->getBeginLoc(), "barrier encountered here",
+                  DiagnosticIDs::Level::Note)
+          << Barrier->getSourceRange();
     }
 
     return true;
@@ -102,7 +159,7 @@ public:
 
   bool TraverseLambdaExpr(LambdaExpr *const LE) {
     // For the declaration of a lambda, we only care about the initializers of
-    // captured variables, because if they contain 'CallExpr's, the we can
+    // captured variables, because if they contain 'CallExpr's, then we can
     // detect possible issues.
     for (const LambdaCapture Capture : LE->explicit_captures()) {
       if (auto *const Var =
@@ -143,21 +200,12 @@ public:
     return true;
   }
 
-  llvm::SmallVector<bool, 4> DescendantCriticalDirectiveHasChild;
   CallStackType DescendantCriticalDirectiveCallStack;
+  llvm::SmallVector<CriticalSectionInfo> CriticalStack;
 
-  std::vector<llvm::SmallVector<CriticalSectionInfo, 4>> Orderings;
-  llvm::SmallVector<CriticalSectionInfo, 4> CurrentOrdering;
-
+  NodeMapType Nodes;
   CriticalSectionDeadlockCheck *Check;
 };
-
-auto createCriticalEqualsNamePredicate(const DeclarationName Name) {
-  return [Name](const NestedCriticalSectionOrderingFinder::CriticalSectionInfo
-                    &Info) {
-    return Info.Critical->getDirectiveName().getName() == Name;
-  };
-}
 } // namespace
 
 void CriticalSectionDeadlockCheck::registerMatchers(MatchFinder *Finder) {
@@ -165,6 +213,143 @@ void CriticalSectionDeadlockCheck::registerMatchers(MatchFinder *Finder) {
       ompExecutableDirective(unless(hasAncestor(ompExecutableDirective())))
           .bind("directive"),
       this);
+}
+
+struct CriticalOrderEdgeType {
+  CriticalOrderEdgeType(CriticalSectionInfo Source, CriticalSectionInfo Target)
+      : Source(std::move(Source)), Target(std::move(Target)) {}
+
+  CriticalSectionInfo Source;
+  CriticalSectionInfo Target;
+};
+
+static void
+checkInconsistentOrdering(const llvm::SmallVector<CriticalOrderEdgeType> &Edges,
+                          const NodeMapType &Nodes, ClangTidyCheck *Check) {
+  if (Edges.empty())
+    return;
+
+  const CriticalOrderEdgeType &LastEdge = Edges.back();
+
+  for (const auto &[Critical, Children] : Nodes) {
+    if (Critical.Critical->getDirectiveName().getName() !=
+        LastEdge.Target.Critical->getDirectiveName().getName())
+      continue;
+
+    for (const CriticalSectionInfo &ChildCritical : Children) {
+      llvm::SmallVector<CriticalOrderEdgeType> Tmp = Edges;
+      const DeclarationNameInfo ChildCriticalName =
+          ChildCritical.Critical->getDirectiveName();
+
+      const auto CycleIter = llvm::find_if(
+          Tmp, [&ChildCriticalName](const CriticalOrderEdgeType &Edge) {
+            return Edge.Source.Critical->getDirectiveName().getName() ==
+                   ChildCriticalName.getName();
+          });
+      if (CycleIter == Tmp.end()) {
+        Tmp.emplace_back(Critical, ChildCritical);
+        checkInconsistentOrdering(Tmp, Nodes, Check);
+        continue;
+      }
+
+      const CriticalOrderEdgeType FirstCritical = *CycleIter;
+
+      llvm::SmallVector<llvm::SmallVector<CriticalOrderEdgeType>> Orderings;
+      Orderings.push_back({});
+      for (const CriticalOrderEdgeType &Edge :
+           llvm::drop_begin(Tmp, std::distance(Tmp.begin(), CycleIter))) {
+        auto &CurrentPath = Orderings.back();
+
+        if (CurrentPath.empty() ||
+            CurrentPath.back().Target.Critical == Edge.Source.Critical)
+          CurrentPath.push_back(Edge);
+        else
+          Orderings.push_back({Edge});
+      }
+
+      if (Orderings.back().back().Target.Critical != Critical.Critical) {
+        Orderings.push_back({});
+      }
+      Orderings.back().emplace_back(Critical, ChildCritical);
+
+      std::string Path;
+      for (const auto &[Source, Target] : Tmp) {
+        if (!Path.empty())
+          Path += " -> ";
+        Path += (llvm::Twine("'") +
+                 Source.Critical->getDirectiveName().getAsString() + "'")
+                    .str();
+      }
+      Path += " -> " +
+              (llvm::Twine("'") +
+               Critical.Critical->getDirectiveName().getAsString() + "'")
+                  .str() +
+              " -> " +
+              (llvm::Twine("'") +
+               ChildCritical.Critical->getDirectiveName().getAsString() + "'")
+                  .str();
+
+      Check->diag(Orderings.front().front().Source.Critical->getBeginLoc(),
+                  "inconsistent dependency ordering for critical section %0; "
+                  "cycle involving %1 critical section orderings detected: %2")
+          << Orderings.front().front().Source.Critical->getSourceRange()
+          << FirstCritical.Source.Critical->getDirectiveName().getName()
+          << Orderings.size() << Path;
+
+      for (const auto &[Index, Ordering] : llvm::enumerate(Orderings)) {
+        std::string SectionPath;
+        for (const auto &[Source, Target] : Ordering) {
+          if (!SectionPath.empty())
+            SectionPath += " -> ";
+          SectionPath +=
+              (llvm::Twine("'") +
+               Source.Critical->getDirectiveName().getAsString() + "'")
+                  .str();
+        }
+        SectionPath +=
+            (llvm::Twine(" -> '") +
+             Ordering.back().Target.Critical->getDirectiveName().getAsString() +
+             "'")
+                .str();
+
+        const auto FirstSource = Ordering.front().Source;
+
+        Check->diag(FirstSource.Critical->getBeginLoc(),
+                    "Ordering %0 of %1: %2; starts here by entering %3 first",
+                    DiagnosticIDs::Level::Note)
+            << FirstSource.Critical->getSourceRange() << (Index + 1)
+            << Orderings.size() << SectionPath
+            << FirstSource.Critical->getDirectiveName().getName();
+
+        for (const auto &[Source, Target] : Ordering) {
+          size_t CallStackStart = 0U;
+          if (!Source.CallStack.empty() && !Target.CallStack.empty()) {
+            CallStackStart = std::distance(
+                Target.CallStack.begin(),
+                llvm::find(Target.CallStack, Source.CallStack.back()));
+          }
+
+          for (const auto *Call :
+               llvm::drop_begin(Target.CallStack, CallStackStart))
+            if (const auto *NamedCallee =
+                    llvm::dyn_cast<NamedDecl>(Call->getCalleeDecl()))
+              Check->diag(Call->getBeginLoc(), "then calls %0 here",
+                          DiagnosticIDs::Level::Note)
+                  << Call->getSourceRange() << NamedCallee;
+            else
+              Check->diag(Call->getBeginLoc(), "then calls function here",
+                          DiagnosticIDs::Level::Note)
+                  << Call->getSourceRange();
+
+          Check->diag(Target.Critical->getBeginLoc(),
+                      "then enters critical section %0 here",
+                      DiagnosticIDs ::Level::Note)
+              << Target.Critical->getSourceRange()
+              << Target.Critical->getDirectiveName().getName();
+        }
+      }
+    }
+  }
 }
 
 void CriticalSectionDeadlockCheck::check(
@@ -175,107 +360,22 @@ void CriticalSectionDeadlockCheck::check(
   NestedCriticalSectionOrderingFinder Visitor(this);
   Visitor.TraverseStmt(const_cast<OMPExecutableDirective *>(Directive));
 
-  const auto PrintCallStackDiags = [this](const CallStackType &CallStack,
-                                          const DeclarationName Name) {
-    for (const CallExpr *const CE : CallStack)
-      diag(CE->getBeginLoc(),
-           "critical section %0 is reached by calling %1 here",
-           DiagnosticIDs::Level::Note)
-          << CE->getSourceRange() << Name
-          << CE->getCalleeDecl()->getAsFunction();
-  };
-
-  for (const auto &[OuterOrderIndex, Order1] :
-       llvm::enumerate(Visitor.Orderings))
-    for (const auto &[Order1BeforeIndex, Order1BeforeInfo] :
-         llvm::enumerate(Order1)) {
-      const auto &[Order1Before, Order1BeforeCallStack] = Order1BeforeInfo;
-      const DeclarationName Order1BeforeName =
-          Order1Before->getDirectiveName().getName();
-      for (const auto &[InnerCyclicCritical, InnerCyclicCriticalCallStack] :
-           llvm::ArrayRef(Order1).drop_front(Order1BeforeIndex))
-        if (InnerCyclicCritical != Order1Before &&
-            Order1BeforeName ==
-                InnerCyclicCritical->getDirectiveName().getName()) {
-          diag(Order1Before->getBeginLoc(),
-               "deadlock while trying to enter a critical section with the "
-               "same name %0 as the already entered critical section here")
-              << Order1Before->getSourceRange() << Order1BeforeName;
-          diag(InnerCyclicCritical->getBeginLoc(),
-               "trying to re-enter the critical section %0 here",
-               DiagnosticIDs::Level::Note)
-              << InnerCyclicCritical->getSourceRange() << Order1BeforeName;
-          for (const CallExpr *const CE : InnerCyclicCriticalCallStack)
-            diag(CE->getBeginLoc(),
-                 "critical section %0 is reached by calling %1 here",
-                 DiagnosticIDs::Level::Note)
-                << CE->getSourceRange()
-                << InnerCyclicCritical->getDirectiveName().getName()
-                << CE->getCalleeDecl()->getAsFunction();
-        }
-      for (size_t InnerOrderIndex = OuterOrderIndex + 1;
-           InnerOrderIndex < Visitor.Orderings.size(); ++InnerOrderIndex) {
-        const auto &Order2 = Visitor.Orderings[InnerOrderIndex];
-        for (const auto &[Order1After, Order1AfterCallStack] :
-             llvm::ArrayRef(Order1).drop_front(Order1BeforeIndex + 1)) {
-          const auto *const IterOrder2 = llvm::find_if(
-              Order2, createCriticalEqualsNamePredicate(Order1BeforeName));
-          if (IterOrder2 == Order2.end())
-            continue;
-          const DeclarationName Order1AfterName =
-              Order1After->getDirectiveName().getName();
-          const auto *const OrderViolationIter =
-              std::find_if(Order2.begin(), IterOrder2,
-                           createCriticalEqualsNamePredicate(Order1AfterName));
-          if (OrderViolationIter != IterOrder2) {
-            diag(
-                Order1Before->getBeginLoc(),
-                "deadlock by inconsistent ordering of critical sections %0 and "
-                "%1")
-                << Order1Before->getSourceRange() << Order1BeforeName
-                << Order1AfterName;
-
-            const auto &[Order2Before, Order2BeforeCallStack] =
-                *OrderViolationIter;
-            const auto &[Order2After, Order2AfterCallStack] = *IterOrder2;
-
-            diag(Order1Before->getBeginLoc(),
-                 "critical section %0 is entered first in the first section "
-                 "ordering here",
-                 DiagnosticIDs::Level::Note)
-                << Order1Before->getSourceRange() << Order1BeforeName;
-            PrintCallStackDiags(Order1BeforeCallStack, Order1BeforeName);
-            diag(Order1After->getBeginLoc(),
-                 "critical section %0 is nested inside %1 in the first section "
-                 "ordering here",
-                 DiagnosticIDs::Level::Note)
-                << Order1After->getSourceRange() << Order1AfterName
-                << Order1BeforeName;
-            PrintCallStackDiags(Order1AfterCallStack, Order1AfterName);
-
-            const DeclarationName Order2BeforeName =
-                Order2Before->getDirectiveName().getName();
-            diag(Order2Before->getBeginLoc(),
-                 "critical section %0 is entered first in the second section "
-                 "ordering here",
-                 DiagnosticIDs::Level::Note)
-                << Order2Before->getSourceRange() << Order2BeforeName;
-            PrintCallStackDiags(Order2BeforeCallStack, Order2BeforeName);
-
-            const DeclarationName Order2AfterName =
-                Order2After->getDirectiveName().getName();
-            diag(
-                Order2After->getBeginLoc(),
-                "critical section %0 is nested inside %1 in the second section "
-                "ordering here",
-                DiagnosticIDs::Level::Note)
-                << Order2After->getSourceRange() << Order2AfterName
-                << Order2BeforeName;
-            PrintCallStackDiags(Order2AfterCallStack, Order2AfterName);
-          }
-        }
-      }
+  for (const auto &[Critical, Children] : Visitor.Nodes) {
+    llvm::errs() << "\n"
+                 << Critical.Critical->getDirectiveName().getName() << ":\n";
+    for (const auto &[ChildCritical, CallStack] : Children) {
+      llvm::errs() << "    '" << ChildCritical->getDirectiveName().getName()
+                   << "'\n";
     }
+  }
+
+  for (const auto &[Critical, Children] : Visitor.Nodes) {
+    for (const auto &ChildCritical : Children)
+      checkInconsistentOrdering(
+          llvm::SmallVector<CriticalOrderEdgeType>{
+              CriticalOrderEdgeType{Critical, ChildCritical}},
+          Visitor.Nodes, this);
+  }
 }
 
 } // namespace clang::tidy::openmp
