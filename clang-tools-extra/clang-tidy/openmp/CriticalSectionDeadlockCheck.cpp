@@ -290,8 +290,9 @@ checkInconsistentOrdering(const llvm::SmallVector<CriticalOrderEdgeType> &Edges,
                   .str();
 
       Check->diag(Orderings.front().front().Source.Critical->getBeginLoc(),
-                  "inconsistent dependency ordering for critical section %0; "
-                  "cycle involving %1 critical section orderings detected: %2")
+                  "inconsistent dependency ordering for critical section %0 "
+                  "can cause a deadlock; cycle involving %1 critical section "
+                  "orderings detected: %2")
           << Orderings.front().front().Source.Critical->getSourceRange()
           << FirstCritical.Source.Critical->getDirectiveName().getName()
           << Orderings.size() << Path;
@@ -359,15 +360,6 @@ void CriticalSectionDeadlockCheck::check(
 
   NestedCriticalSectionOrderingFinder Visitor(this);
   Visitor.TraverseStmt(const_cast<OMPExecutableDirective *>(Directive));
-
-  for (const auto &[Critical, Children] : Visitor.Nodes) {
-    llvm::errs() << "\n"
-                 << Critical.Critical->getDirectiveName().getName() << ":\n";
-    for (const auto &[ChildCritical, CallStack] : Children) {
-      llvm::errs() << "    '" << ChildCritical->getDirectiveName().getName()
-                   << "'\n";
-    }
-  }
 
   for (const auto &[Critical, Children] : Visitor.Nodes) {
     for (const auto &ChildCritical : Children)

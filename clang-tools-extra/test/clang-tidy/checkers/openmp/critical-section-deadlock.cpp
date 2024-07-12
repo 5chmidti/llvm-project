@@ -63,7 +63,7 @@ void Cycle(bool* flags, int N) {
   #pragma omp parallel for
   for (int i = 0; i < N; ++i) {
     if (flags[i])
-// CHECK-MESSAGES: :[[@LINE+5]]:7: warning: inconsistent dependency ordering for critical section 'X'; cycle involving 2 critical section orderings detected: 'X' -> 'Y' -> 'X' [openmp-critical-section-deadlock]
+// CHECK-MESSAGES: :[[@LINE+5]]:7: warning: inconsistent dependency ordering for critical section 'X' can cause a deadlock; cycle involving 2 critical section orderings detected: 'X' -> 'Y' -> 'X' [openmp-critical-section-deadlock]
 // CHECK-MESSAGES: :[[@LINE+4]]:7: note: Ordering 1 of 2: 'X' -> 'Y'; starts here by entering 'X' first
 // CHECK-MESSAGES: :[[@LINE+4]]:9: note: then enters critical section 'Y' here
 // CHECK-MESSAGES: :[[@LINE+11]]:7: note: Ordering 2 of 2: 'Y' -> 'X'; starts here by entering 'Y' first
@@ -72,7 +72,7 @@ void Cycle(bool* flags, int N) {
         #pragma omp critical(Y)
           x = y;
     else
-// CHECK-MESSAGES: :[[@LINE+5]]:7: warning: inconsistent dependency ordering for critical section 'Y'; cycle involving 2 critical section orderings detected: 'Y' -> 'X' -> 'Y' [openmp-critical-section-deadlock]
+// CHECK-MESSAGES: :[[@LINE+5]]:7: warning: inconsistent dependency ordering for critical section 'Y' can cause a deadlock; cycle involving 2 critical section orderings detected: 'Y' -> 'X' -> 'Y' [openmp-critical-section-deadlock]
 // CHECK-MESSAGES: :[[@LINE+4]]:7: note: Ordering 1 of 2: 'Y' -> 'X'; starts here by entering 'Y' first
 // CHECK-MESSAGES: :[[@LINE+4]]:9: note: then enters critical section 'X' here
 // CHECK-MESSAGES: :[[@LINE-7]]:7: note: Ordering 2 of 2: 'X' -> 'Y'; starts here by entering 'X' first
@@ -85,7 +85,7 @@ void Cycle(bool* flags, int N) {
   #pragma omp parallel for
   for (int i = 0; i < N; ++i) {
     if (flags[i])
-// CHECK-MESSAGES: :[[@LINE+6]]:7: warning: inconsistent dependency ordering for critical section 'X'; cycle involving 2 critical section orderings detected: 'X' -> 'Y' -> 'Name' -> 'X' [openmp-critical-section-deadlock]
+// CHECK-MESSAGES: :[[@LINE+6]]:7: warning: inconsistent dependency ordering for critical section 'X' can cause a deadlock; cycle involving 2 critical section orderings detected: 'X' -> 'Y' -> 'Name' -> 'X' [openmp-critical-section-deadlock]
 // CHECK-MESSAGES: :[[@LINE+5]]:7: note: Ordering 1 of 2: 'X' -> 'Y'; starts here by entering 'X' first
 // CHECK-MESSAGES: :[[@LINE+8]]:11: note: then enters critical section 'Y' here
 // CHECK-MESSAGES: :[[@LINE+24]]:7: note: Ordering 2 of 2: 'Y' -> 'Name' -> 'X'; starts here by entering 'Y' first
@@ -99,13 +99,13 @@ void Cycle(bool* flags, int N) {
             x = y;
         }
     else
-// CHECK-MESSAGES: :[[@LINE+13]]:7: warning: inconsistent dependency ordering for critical section 'Y'; cycle involving 2 critical section orderings detected: 'Y' -> 'Name' -> 'X' -> 'Y' [openmp-critical-section-deadlock]
+// CHECK-MESSAGES: :[[@LINE+13]]:7: warning: inconsistent dependency ordering for critical section 'Y' can cause a deadlock; cycle involving 2 critical section orderings detected: 'Y' -> 'Name' -> 'X' -> 'Y' [openmp-critical-section-deadlock]
 // CHECK-MESSAGES: :[[@LINE+12]]:7: note: Ordering 1 of 2: 'Y' -> 'Name' -> 'X'; starts here by entering 'Y' first
 // CHECK-MESSAGES: :[[@LINE+12]]:9: note: then enters critical section 'Name' here
 // CHECK-MESSAGES: :[[@LINE+12]]:11: note: then enters critical section 'X' here
 // CHECK-MESSAGES: :[[@LINE-12]]:7: note: Ordering 2 of 2: 'X' -> 'Y'; starts here by entering 'X' first
 // CHECK-MESSAGES: :[[@LINE-9]]:11: note: then enters critical section 'Y' here
-// CHECK-MESSAGES: :[[@LINE+8]]:9: warning: inconsistent dependency ordering for critical section 'Name'; cycle involving 3 critical section orderings detected: 'Name' -> 'X' -> 'Y' -> 'Name' [openmp-critical-section-deadlock]
+// CHECK-MESSAGES: :[[@LINE+8]]:9: warning: inconsistent dependency ordering for critical section 'Name' can cause a deadlock; cycle involving 3 critical section orderings detected: 'Name' -> 'X' -> 'Y' -> 'Name' [openmp-critical-section-deadlock]
 // CHECK-MESSAGES: :[[@LINE+7]]:9: note: Ordering 1 of 3: 'Name' -> 'X'; starts here by entering 'Name' first
 // CHECK-MESSAGES: :[[@LINE+7]]:11: note: then enters critical section 'X' here
 // CHECK-MESSAGES: :[[@LINE-17]]:7: note: Ordering 2 of 3: 'X' -> 'Y'; starts here by entering 'X' first
@@ -159,14 +159,14 @@ void Cycle(bool* flags, int N) {
 // CHECK-MESSAGES: :[[@LINE+17]]:7: warning: deadlock while trying to enter a critical section with the same name '' as the already entered critical section here [openmp-critical-section-deadlock]
 // CHECK-MESSAGES: :[[@LINE+17]]:16: note: then calls 'operator()' here
 // CHECK-MESSAGES: :31:3: note: then tries to re-enter the critical section '' here
-// CHECK-MESSAGES: :[[@LINE+14]]:7: warning: inconsistent dependency ordering for critical section ''; cycle involving 2 critical section orderings detected: '' -> '' -> '' [openmp-critical-section-deadlock]
+// CHECK-MESSAGES: :[[@LINE+14]]:7: warning: inconsistent dependency ordering for critical section '' can cause a deadlock; cycle involving 2 critical section orderings detected: '' -> '' -> '' [openmp-critical-section-deadlock]
 // CHECK-MESSAGES: :[[@LINE+13]]:7: note: Ordering 1 of 2: '' -> ''; starts here by entering '' first
 // CHECK-MESSAGES: :[[@LINE+13]]:16: note: then calls 'operator()' here
 // CHECK-MESSAGES: :31:3: note: then enters critical section '' here
 // CHECK-MESSAGES: :[[@LINE+10]]:7: note: Ordering 2 of 2: '' -> ''; starts here by entering '' first
 // CHECK-MESSAGES: :[[@LINE+10]]:16: note: then calls 'operator()' here
 // CHECK-MESSAGES: :31:3: note: then enters critical section '' here
-// CHECK-MESSAGES: :[[@LINE+7]]:7: warning: inconsistent dependency ordering for critical section ''; cycle involving 2 critical section orderings detected: 'X' -> '' -> '' -> '' [openmp-critical-section-deadlock]
+// CHECK-MESSAGES: :[[@LINE+7]]:7: warning: inconsistent dependency ordering for critical section '' can cause a deadlock; cycle involving 2 critical section orderings detected: 'X' -> '' -> '' -> '' [openmp-critical-section-deadlock]
 // CHECK-MESSAGES: :[[@LINE+6]]:7: note: Ordering 1 of 2: '' -> ''; starts here by entering '' first
 // CHECK-MESSAGES: :[[@LINE+6]]:16: note: then calls 'operator()' here
 // CHECK-MESSAGES: :31:3: note: then enters critical section '' here
@@ -181,14 +181,14 @@ void Cycle(bool* flags, int N) {
   for (int i = 0; i < N; ++i) {
     if (flags[i])
 
-// CHECK-MESSAGES: :[[@LINE+14]]:7: warning: inconsistent dependency ordering for critical section 'X'; cycle involving 2 critical section orderings detected: 'X' -> '' -> 'X' [openmp-critical-section-deadlock]
+// CHECK-MESSAGES: :[[@LINE+14]]:7: warning: inconsistent dependency ordering for critical section 'X' can cause a deadlock; cycle involving 2 critical section orderings detected: 'X' -> '' -> 'X' [openmp-critical-section-deadlock]
 // CHECK-MESSAGES: :[[@LINE+13]]:7: note: Ordering 1 of 2: 'X' -> ''; starts here by entering 'X' first
 // CHECK-MESSAGES: :[[@LINE+13]]:9: note: then calls 'operator()' here
 // CHECK-MESSAGES: :21:3: note: then enters critical section '' here
 // CHECK-MESSAGES: :[[@LINE+13]]:7: note: Ordering 2 of 2: '' -> 'X'; starts here by entering '' first
 // CHECK-MESSAGES: :[[@LINE+13]]:9: note: then calls 'operator()' here
 // CHECK-MESSAGES: :26:3: note: then enters critical section 'X' here
-// CHECK-MESSAGES: :[[@LINE+10]]:7: warning: inconsistent dependency ordering for critical section ''; cycle involving 2 critical section orderings detected: '' -> 'X' -> '' [openmp-critical-section-deadlock]
+// CHECK-MESSAGES: :[[@LINE+10]]:7: warning: inconsistent dependency ordering for critical section '' can cause a deadlock; cycle involving 2 critical section orderings detected: '' -> 'X' -> '' [openmp-critical-section-deadlock]
 // CHECK-MESSAGES: :[[@LINE+9]]:7: note: Ordering 1 of 2: '' -> 'X'; starts here by entering '' first
 // CHECK-MESSAGES: :[[@LINE+9]]:9: note: then calls 'operator()' here
 // CHECK-MESSAGES: :26:3: note: then enters critical section 'X' here
@@ -231,14 +231,14 @@ void Cycle(bool* flags, int N) {
   #pragma omp parallel for
   for (int i = 0; i < N; ++i) {
     if (flags[i])
-// CHECK-MESSAGES: :[[@LINE+14]]:7: warning: inconsistent dependency ordering for critical section 'Name1'; cycle involving 2 critical section orderings detected: 'Name1' -> 'Name2' -> 'Name1' [openmp-critical-section-deadlock]
+// CHECK-MESSAGES: :[[@LINE+14]]:7: warning: inconsistent dependency ordering for critical section 'Name1' can cause a deadlock; cycle involving 2 critical section orderings detected: 'Name1' -> 'Name2' -> 'Name1' [openmp-critical-section-deadlock]
 // CHECK-MESSAGES: :[[@LINE+13]]:7: note: Ordering 1 of 2: 'Name1' -> 'Name2'; starts here by entering 'Name1' first
 // CHECK-MESSAGES: :[[@LINE+13]]:9: note: then calls 'fooWithVisibleName2Critical' here
 // CHECK-MESSAGES: :13:5: note: then enters critical section 'Name2' here
 // CHECK-MESSAGES: :[[@LINE+13]]:7: note: Ordering 2 of 2: 'Name2' -> 'Name1'; starts here by entering 'Name2' first
 // CHECK-MESSAGES: :[[@LINE+13]]:9: note: then calls 'fooWithVisibleName1Critical' here
 // CHECK-MESSAGES: :9:5: note: then enters critical section 'Name1' here
-// CHECK-MESSAGES: :[[@LINE+10]]:7: warning: inconsistent dependency ordering for critical section 'Name2'; cycle involving 2 critical section orderings detected: 'Name2' -> 'Name1' -> 'Name2' [openmp-critical-section-deadlock]
+// CHECK-MESSAGES: :[[@LINE+10]]:7: warning: inconsistent dependency ordering for critical section 'Name2' can cause a deadlock; cycle involving 2 critical section orderings detected: 'Name2' -> 'Name1' -> 'Name2' [openmp-critical-section-deadlock]
 // CHECK-MESSAGES: :[[@LINE+9]]:7: note: Ordering 1 of 2: 'Name2' -> 'Name1'; starts here by entering 'Name2' first
 // CHECK-MESSAGES: :[[@LINE+9]]:9: note: then calls 'fooWithVisibleName1Critical' here
 // CHECK-MESSAGES: :9:5: note: then enters critical section 'Name1' here
@@ -254,12 +254,12 @@ void Cycle(bool* flags, int N) {
 
   #pragma omp parallel
   {
-// CHECK-MESSAGES: :[[@LINE+10]]:5: warning: inconsistent dependency ordering for critical section 'X'; cycle involving 2 critical section orderings detected: 'X' -> 'Y' -> 'X' [openmp-critical-section-deadlock]
+// CHECK-MESSAGES: :[[@LINE+10]]:5: warning: inconsistent dependency ordering for critical section 'X' can cause a deadlock; cycle involving 2 critical section orderings detected: 'X' -> 'Y' -> 'X' [openmp-critical-section-deadlock]
 // CHECK-MESSAGES: :[[@LINE+9]]:5: note: Ordering 1 of 2: 'X' -> 'Y'; starts here by entering 'X' first
 // CHECK-MESSAGES: :[[@LINE+9]]:7: note: then enters critical section 'Y' here
 // CHECK-MESSAGES: :[[@LINE+13]]:5: note: Ordering 2 of 2: 'Y' -> 'X'; starts here by entering 'Y' first
 // CHECK-MESSAGES: :[[@LINE+13]]:7: note: then enters critical section 'X' here
-// CHECK-MESSAGES: :[[@LINE+11]]:5: warning: inconsistent dependency ordering for critical section 'Y'; cycle involving 2 critical section orderings detected: 'Y' -> 'X' -> 'Y' [openmp-critical-section-deadlock]
+// CHECK-MESSAGES: :[[@LINE+11]]:5: warning: inconsistent dependency ordering for critical section 'Y' can cause a deadlock; cycle involving 2 critical section orderings detected: 'Y' -> 'X' -> 'Y' [openmp-critical-section-deadlock]
 // CHECK-MESSAGES: :[[@LINE+10]]:5: note: Ordering 1 of 2: 'Y' -> 'X'; starts here by entering 'Y' first
 // CHECK-MESSAGES: :[[@LINE+10]]:7: note: then enters critical section 'X' here
 // CHECK-MESSAGES: :[[@LINE+2]]:5: note: Ordering 2 of 2: 'X' -> 'Y'; starts here by entering 'X' first
@@ -277,21 +277,21 @@ void Cycle(bool* flags, int N) {
 
   #pragma omp parallel
   {
-// CHECK-MESSAGES: :[[@LINE+21]]:5: warning: inconsistent dependency ordering for critical section 'A'; cycle involving 3 critical section orderings detected: 'A' -> 'B' -> 'C' -> 'A' [openmp-critical-section-deadlock]
+// CHECK-MESSAGES: :[[@LINE+21]]:5: warning: inconsistent dependency ordering for critical section 'A' can cause a deadlock; cycle involving 3 critical section orderings detected: 'A' -> 'B' -> 'C' -> 'A' [openmp-critical-section-deadlock]
 // CHECK-MESSAGES: :[[@LINE+20]]:5: note: Ordering 1 of 3: 'A' -> 'B'; starts here by entering 'A' first
 // CHECK-MESSAGES: :[[@LINE+20]]:7: note: then enters critical section 'B' here
 // CHECK-MESSAGES: :[[@LINE+22]]:5: note: Ordering 2 of 3: 'B' -> 'C'; starts here by entering 'B' first
 // CHECK-MESSAGES: :[[@LINE+22]]:7: note: then enters critical section 'C' here
 // CHECK-MESSAGES: :[[@LINE+24]]:5: note: Ordering 3 of 3: 'C' -> 'A'; starts here by entering 'C' first
 // CHECK-MESSAGES: :[[@LINE+24]]:7: note: then enters critical section 'A' here
-// CHECK-MESSAGES: :[[@LINE+18]]:5: warning: inconsistent dependency ordering for critical section 'B'; cycle involving 3 critical section orderings detected: 'B' -> 'C' -> 'A' -> 'B' [openmp-critical-section-deadlock]
+// CHECK-MESSAGES: :[[@LINE+18]]:5: warning: inconsistent dependency ordering for critical section 'B' can cause a deadlock; cycle involving 3 critical section orderings detected: 'B' -> 'C' -> 'A' -> 'B' [openmp-critical-section-deadlock]
 // CHECK-MESSAGES: :[[@LINE+17]]:5: note: Ordering 1 of 3: 'B' -> 'C'; starts here by entering 'B' first
 // CHECK-MESSAGES: :[[@LINE+17]]:7: note: then enters critical section 'C' here
 // CHECK-MESSAGES: :[[@LINE+19]]:5: note: Ordering 2 of 3: 'C' -> 'A'; starts here by entering 'C' first
 // CHECK-MESSAGES: :[[@LINE+19]]:7: note: then enters critical section 'A' here
 // CHECK-MESSAGES: :[[@LINE+9]]:5: note: Ordering 3 of 3: 'A' -> 'B'; starts here by entering 'A' first
 // CHECK-MESSAGES: :[[@LINE+9]]:7: note: then enters critical section 'B' here
-// CHECK-MESSAGES: :[[@LINE+15]]:5: warning: inconsistent dependency ordering for critical section 'C'; cycle involving 3 critical section orderings detected: 'C' -> 'A' -> 'B' -> 'C' [openmp-critical-section-deadlock]
+// CHECK-MESSAGES: :[[@LINE+15]]:5: warning: inconsistent dependency ordering for critical section 'C' can cause a deadlock; cycle involving 3 critical section orderings detected: 'C' -> 'A' -> 'B' -> 'C' [openmp-critical-section-deadlock]
 // CHECK-MESSAGES: :[[@LINE+14]]:5: note: Ordering 1 of 3: 'C' -> 'A'; starts here by entering 'C' first
 // CHECK-MESSAGES: :[[@LINE+14]]:7: note: then enters critical section 'A' here
 // CHECK-MESSAGES: :[[@LINE+4]]:5: note: Ordering 2 of 3: 'A' -> 'B'; starts here by entering 'A' first
@@ -321,7 +321,7 @@ void SelfCycle() {
 // CHECK-MESSAGES: :[[@LINE+10]]:5: warning: deadlock while trying to enter a critical section with the same name 'Name1' as the already entered critical section here [openmp-critical-section-deadlock]
 // CHECK-MESSAGES: :[[@LINE+10]]:7: note: then calls 'fooWithVisibleName1Critical' here
 // CHECK-MESSAGES: :9:5: note: then tries to re-enter the critical section 'Name1' here
-// CHECK-MESSAGES: :[[@LINE+7]]:5: warning: inconsistent dependency ordering for critical section 'Name1'; cycle involving 2 critical section orderings detected: 'Name1' -> 'Name1' -> 'Name1' [openmp-critical-section-deadlock]
+// CHECK-MESSAGES: :[[@LINE+7]]:5: warning: inconsistent dependency ordering for critical section 'Name1' can cause a deadlock; cycle involving 2 critical section orderings detected: 'Name1' -> 'Name1' -> 'Name1' [openmp-critical-section-deadlock]
 // CHECK-MESSAGES: :[[@LINE+6]]:5: note: Ordering 1 of 2: 'Name1' -> 'Name1'; starts here by entering 'Name1' first
 // CHECK-MESSAGES: :[[@LINE+6]]:7: note: then calls 'fooWithVisibleName1Critical' here
 // CHECK-MESSAGES: :9:5: note: then enters critical section 'Name1' here
@@ -340,7 +340,7 @@ void SelfCycle() {
 // CHECK-MESSAGES: :[[@LINE+12]]:7: note: then calls 'operator()' here
 // CHECK-MESSAGES: :[[@LINE-7]]:32: note: then calls 'fooWithVisibleName1Critical' here
 // CHECK-MESSAGES: :9:5: note: then tries to re-enter the critical section 'Name1' here
-// CHECK-MESSAGES: :[[@LINE+8]]:5: warning: inconsistent dependency ordering for critical section 'Name1'; cycle involving 2 critical section orderings detected: 'Name1' -> 'Name1' -> 'Name1' [openmp-critical-section-deadlock]
+// CHECK-MESSAGES: :[[@LINE+8]]:5: warning: inconsistent dependency ordering for critical section 'Name1' can cause a deadlock; cycle involving 2 critical section orderings detected: 'Name1' -> 'Name1' -> 'Name1' [openmp-critical-section-deadlock]
 // CHECK-MESSAGES: :[[@LINE+7]]:5: note: Ordering 1 of 2: 'Name1' -> 'Name1'; starts here by entering 'Name1' first
 // CHECK-MESSAGES: :[[@LINE+7]]:7: note: then calls 'operator()' here
 // CHECK-MESSAGES: :[[@LINE-12]]:32: note: then calls 'fooWithVisibleName1Critical' here
