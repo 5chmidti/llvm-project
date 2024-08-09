@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "../utils/OpenMP.h"
 #include "TaskDependenciesBetweenNonSiblingTasksCheck.h"
+#include "../utils/OpenMP.h"
 #include "clang/AST/Decl.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/ExprOpenMP.h"
@@ -22,11 +22,11 @@ using namespace clang::ast_matchers;
 
 namespace clang::tidy::openmp {
 // NOLINTBEGIN(readability-identifier-naming)
-extern const ast_matchers::internal::VariadicDynCastAllOfMatcher<
-    OMPClause, OMPDependClause>
+const ast_matchers::internal::VariadicDynCastAllOfMatcher<OMPClause,
+                                                          OMPDependClause>
     ompDependClause;
-extern const ast_matchers::internal::VariadicDynCastAllOfMatcher<
-    Stmt, OMPArraySectionExpr>
+const ast_matchers::internal::VariadicDynCastAllOfMatcher<Stmt,
+                                                          OMPArraySectionExpr>
     ompArraySectionExpr;
 // NOLINTEND(readability-identifier-naming)
 
