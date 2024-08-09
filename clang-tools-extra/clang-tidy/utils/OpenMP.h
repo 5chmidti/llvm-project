@@ -12,10 +12,13 @@
 #include "clang/AST/Expr.h"
 #include "clang/AST/ExprOpenMP.h"
 #include "clang/AST/OpenMPClause.h"
+#include "clang/AST/StmtOpenMP.h"
 #include "clang/ASTMatchers/ASTMatchersInternal.h"
+#include "clang/ASTMatchers/ASTMatchersMacros.h"
 #include "clang/Basic/OpenMPKinds.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SetOperations.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/Frontend/OpenMP/OMP.h.inc"
 #include "llvm/Support/Casting.h"
 #include <llvm/ADT/SmallPtrSet.h>
