@@ -19,14 +19,20 @@
 #include "llvm/Support/Casting.h"
 #include <cstdint>
 
+static void maybeAdd(llvm::SmallPtrSet<const clang::ValueDecl *, 4> &Decls,
+                     const clang::ValueDecl *VDecl) {
+  if (VDecl && !VDecl->isImplicit() && !VDecl->getName().starts_with("."))
+    Decls.insert(VDecl);
+}
+
 template <typename ClauseKind>
 void addCapturedDeclsOf(const clang::OMPExecutableDirective *const Directive,
                         llvm::SmallPtrSet<const clang::ValueDecl *, 4> &Decls) {
   for (const clang::OMPClause *const Clause : Directive->clauses())
     if (const auto *const CastClause = llvm::dyn_cast<ClauseKind>(Clause))
       for (const auto *const ClauseChild : Clause->children())
-        if (const auto Var = llvm::dyn_cast<clang::DeclRefExpr>(ClauseChild))
-          Decls.insert(Var->getDecl());
+        if (const auto *Var = llvm::dyn_cast<clang::DeclRefExpr>(ClauseChild))
+          maybeAdd(Decls, Var->getDecl());
 }
 
 template <typename ClauseKind>
@@ -36,9 +42,9 @@ void eraseCapturedDeclsOf(
   for (const clang::OMPClause *const Clause : Directive->clauses())
     if (const auto *const CastClause = llvm::dyn_cast<ClauseKind>(Clause))
       for (const auto *const ClauseChild : Clause->children())
-        if (const auto Var = llvm::dyn_cast<clang::DeclRefExpr>(ClauseChild);
+        if (const auto *Var = llvm::dyn_cast<clang::DeclRefExpr>(ClauseChild);
             Var && !Var->refersToEnclosingVariableOrCapture())
-          Decls.erase(Var->getDecl());
+          maybeAdd(Decls, Var->getDecl());
 }
 
 namespace clang::tidy::openmp {
@@ -79,7 +85,7 @@ getSharedVariables(const OMPExecutableDirective *Directive,
           if (const auto *const DRef =
                   llvm::dyn_cast_if_present<DeclRefExpr>(InnerCapture);
               DRef && !DRef->refersToEnclosingVariableOrCapture())
-            PossiblySharedDecls.insert(DRef->getDecl());
+            maybeAdd(PossiblySharedDecls, DRef->getDecl());
 
   eraseCapturedDeclsOf<OMPFirstprivateClause>(Directive, PossiblySharedDecls);
   eraseCapturedDeclsOf<OMPPrivateClause>(Directive, PossiblySharedDecls);
