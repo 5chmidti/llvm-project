@@ -747,7 +747,7 @@ void UnprotectedSharedVariableAccessCheck::check(
       const bool IsInSingleOrSections = UnprotectedAccess.isInContextOf(
           OpenMPDirectiveKind::OMPD_sections, OpenMPDirectiveKind::OMPD_single);
 
-      if (UnprotectedAcesses.empty() &&
+      if (UnprotectedAcesses.size() < 2 &&
           (IsInSingleOrSections || AllMutationsAreDependent))
         continue;
       diag(UnprotectedAccess.S->getBeginLoc(),
