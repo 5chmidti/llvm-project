@@ -41,12 +41,6 @@ extern const ast_matchers::internal::MapAnyOfMatcherImpl<
     OMPInReductionClause>
     ompPrivatizationClause;
 
-const ast_matchers::internal::MapAnyOfMatcher<
-    OMPCriticalDirective, OMPAtomicDirective, OMPOrderedDirective,
-    OMPSingleDirective> // FIXME: single is not protected, what about ordered?
-                        // how to fit masked into this?
-    ompProtectedAccessDirective;
-
 const ast_matchers::internal::VariadicDynCastAllOfMatcher<Stmt,
                                                           OMPTaskDirective>
     ompTaskDirective;
