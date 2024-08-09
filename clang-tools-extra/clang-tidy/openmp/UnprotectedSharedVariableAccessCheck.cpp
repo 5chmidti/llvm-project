@@ -338,7 +338,7 @@ public:
   bool TraverseOMPExecutableDirective(OMPExecutableDirective *Directive) {
     const bool IsParallelDirective = isOpenMPDirectiveKind(
         Directive->getDirectiveKind(), llvm::omp::Directive::OMPD_parallel,
-        llvm::omp::Directive::OMPD_target);
+        llvm::omp::Directive::OMPD_teams);
     if (IsParallelDirective)
       ++ParallelContextDepth;
 
