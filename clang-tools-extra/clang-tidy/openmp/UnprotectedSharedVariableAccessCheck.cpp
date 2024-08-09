@@ -409,6 +409,7 @@ public:
   }
 
   bool TraverseCapturedStmt(CapturedStmt *S) { return true; }
+  bool TraverseCapturedDecl(CapturedDecl *D) { return true; }
 
   bool TraverseDeclRefExpr(DeclRefExpr *DRef) {
     if (ParallelContextDepth == 0)
