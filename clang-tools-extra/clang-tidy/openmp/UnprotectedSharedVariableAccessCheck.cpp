@@ -376,6 +376,22 @@ public:
     return true;
   }
 
+  // Have to force traversal to only go through the custom
+  // 'TraverseOMPExecutableDirective'. Otherwise, the
+  // 'Base::TraverseOMPCriticalDirective' would call
+  // 'getDerived().TraverseOMPExecutableDirective' before traversing
+  // it's children, which would cause visitation of the statements
+  // inside the directive to be traversed twice.
+  bool TraverseOMPCriticalDirective(OMPCriticalDirective *D) {
+    return TraverseOMPExecutableDirective(D);
+  }
+  bool TraverseOMPAtomicDirective(OMPAtomicDirective *D) {
+    return TraverseOMPExecutableDirective(D);
+  }
+  bool TraverseOMPSingleDirective(OMPSingleDirective *D) {
+    return TraverseOMPExecutableDirective(D);
+  }
+
   bool TraverseVarDecl(VarDecl *V) {
     if (V->hasGlobalStorage())
       State.SharedAndPrivateVars.addGlobal(V);
