@@ -103,6 +103,18 @@ public:
     });
   }
 
+  template <typename... Directives> bool isInDirective() {
+    return llvm::any_of(DirectiveStack, [](const OMPExecutableDirective *D) {
+      return (llvm::isa<Directives>(D) || ...);
+    });
+  }
+
+  bool isInDirective(const OpenMPDirectiveKind Kind) {
+    return llvm::any_of(AncestorContext, [Kind](const OpenMPDirectiveKind D) {
+      return D == Kind;
+    });
+  }
+
   llvm::SmallVector<const OMPExecutableDirective *> DirectiveStack;
   llvm::SmallVector<OpenMPDirectiveKind, 8> AncestorContext;
 };
@@ -420,7 +432,10 @@ public:
     }
 
     const bool IsReductionVariable = State.Reductions.isReductionVar(Var);
-    bool IsProtected = LockedRegionCount > 0 || IsReductionVariable;
+    bool IsProtected =
+        LockedRegionCount > 0 || IsReductionVariable ||
+        State.Directives
+            .isInDirective<OMPCriticalDirective, OMPAtomicDirective>();
     if (!IsProtected) {
       const auto GetThreadNum =
           callExpr(callee(functionDecl(hasName("::omp_get_thread_num"))));
@@ -441,14 +456,9 @@ public:
                  hasElse(hasDescendant(declRefExpr(equalsBoundNode("dref")))));
       // FIXME: can use traversal to know if there is an ancestor
       const auto MatchResult = match(
-          traverse(
-              TK_IgnoreUnlessSpelledInSource,
-              declRefExpr(
-                  declRefExpr().bind("dref"),
-                  anyOf(hasAncestor(ifStmt(anyOf(TrueIf, FalseIf))),
-                        hasAncestor(ompExecutableDirective(anyOf(
-                            ompProtectedAccessDirective().bind("protected"),
-                            ompTaskDirective())))))),
+          traverse(TK_IgnoreUnlessSpelledInSource,
+                   declRefExpr(declRefExpr().bind("dref"),
+                               hasAncestor(ifStmt(anyOf(TrueIf, FalseIf))))),
           *DRef, Ctx);
       IsProtected =
           !MatchResult.empty() &&
@@ -478,7 +488,8 @@ public:
   }
 
   bool TraverseFunctionDecl(FunctionDecl *const FD) {
-    if (ParallelContextDepth == 0 && !FD->isTemplated())
+    if (ParallelContextDepth == 0 && !FD->isTemplated() &&
+        !FD->isDependentContext())
       return Base::TraverseFunctionDecl(FD);
 
     return true;
