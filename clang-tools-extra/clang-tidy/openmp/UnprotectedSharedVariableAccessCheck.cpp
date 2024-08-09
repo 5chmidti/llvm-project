@@ -488,9 +488,10 @@ public:
     if (ParallelContextDepth == 0)
       return true;
 
+    Base::TraverseStmt(CE->getCallee());
     for (Expr *const Arg : CE->arguments())
       Base::TraverseStmt(Arg);
-    const auto *const FDecl =
+    auto *const FDecl =
         llvm::dyn_cast_or_null<FunctionDecl>(CE->getCalleeDecl());
     if (!FDecl)
       return true;
@@ -507,8 +508,8 @@ public:
     CallStack.push_back(FDecl);
     if (FDecl->hasBody()) {
       for (ParmVarDecl *const Param : FDecl->parameters())
-        TraverseDecl(Param);
-      TraverseStmt(FDecl->getBody());
+        Base::TraverseDecl(Param);
+      Base::TraverseFunctionDecl(FDecl);
     }
     CallStack.pop_back();
     return true;
@@ -518,9 +519,10 @@ public:
     if (ParallelContextDepth == 0)
       return true;
 
+    Base::TraverseStmt(CE->getCallee());
     for (Expr *const Arg : CE->arguments())
       Base::TraverseStmt(Arg);
-    const auto *const FDecl =
+    auto *const FDecl =
         llvm::dyn_cast_or_null<FunctionDecl>(CE->getCalleeDecl());
     if (!FDecl)
       return true;
@@ -535,8 +537,11 @@ public:
     else if (FunctionName == "omp_unset_lock")
       --LockedRegionCount;
     CallStack.push_back(FDecl);
-    if (FDecl->hasBody())
-      TraverseStmt(FDecl->getBody());
+    if (FDecl->hasBody()) {
+      for (ParmVarDecl *const Param : FDecl->parameters())
+        Base::TraverseDecl(Param);
+      Base::TraverseFunctionDecl(FDecl);
+    }
     CallStack.pop_back();
     return true;
   }
