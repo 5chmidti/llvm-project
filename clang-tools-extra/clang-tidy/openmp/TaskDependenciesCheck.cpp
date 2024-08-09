@@ -182,7 +182,8 @@ void TaskDependenciesCheck::check(const MatchFinder::MatchResult &Result) {
                            : OpenMPDependClauseKind::OMPC_DEPEND_in);
       }
 
-      if (DependencyKind == Guess)
+      if (DependencyKind == Guess ||
+          Guess == OpenMPDependClauseKind::OMPC_DEPEND_unknown)
         continue;
 
       if (Guess == OpenMPDependClauseKind::OMPC_DEPEND_inout) {
