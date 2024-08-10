@@ -425,23 +425,65 @@ auto atomicMatch() {
 auto unnecessaryAtomic() {
   return ompAtomicDirective(
       has(atomicOperation()),
-      hasAncestor(ompExecutableDirective(
-          isOpenMPParallelDirective(),
-          unless(hasSharedVariable(declRefExpr(to(equalsBoundNode("x"))))))));
+      hasAncestor(
+          ompExecutableDirective(
+              isOpenMPParallelDirective(),
+              unless(hasAncestor(
+                  ompExecutableDirective(isOpenMPParallelDirective()))),
+              unless(hasSharedVariable(declRefExpr(to(equalsBoundNode("x"))))))
+              .bind("directive")));
 }
 
 } // namespace
 
 void UseAtomicInsteadOfCriticalCheck::registerMatchers(MatchFinder *Finder) {
-  Finder->addMatcher(ompExecutableDirective(isOpenMPParallelDirective())
-                         .bind("parallel-directive"),
-                     this);
+  Finder->addMatcher(
+      ompExecutableDirective(isOpenMPParallelDirective(),
+                             unless(hasAncestor(ompExecutableDirective(
+                                 isOpenMPParallelDirective()))))
+          .bind("parallel-directive"),
+      this);
   Finder->addMatcher(unnecessaryAtomic().bind("unnecessary-atomic"), this);
 }
 
 void UseAtomicInsteadOfCriticalCheck::check(
     const MatchFinder::MatchResult &Result) {
   ASTContext &Ctx = *Result.Context;
+
+  class Visitor : public RecursiveASTVisitor<Visitor> {
+  public:
+    using Base = RecursiveASTVisitor<Visitor>;
+
+    explicit Visitor(ASTContext &Ctx, const ValueDecl *VDecl,
+                     const Stmt *TargetS)
+        : VDecl(VDecl), TargetS(TargetS), State(Ctx) {}
+
+    bool TraverseOMPExecutableDirective(OMPExecutableDirective *Directive) {
+      State.add(Directive);
+      if (!Directive->isStandaloneDirective()) {
+        Stmt *Statement = Directive->getStructuredBlock();
+        Base::TraverseStmt(Statement);
+      }
+      State.pop();
+
+      return true;
+    }
+
+    bool TraverseStmt(Stmt *S) {
+      if (S == TargetS) {
+        IsShared = State.SharedAndPrivateVars.is(
+            VDecl, SharedAndPrivateState::State::Shared);
+        return false;
+      }
+
+      return Base::TraverseStmt(S);
+    }
+
+    const ValueDecl *VDecl;
+    const Stmt *TargetS;
+    VariableState State;
+    bool IsShared = false;
+  };
 
   if (const auto *const Parallel =
           Result.Nodes.getNodeAs<OMPExecutableDirective>(
@@ -465,6 +507,15 @@ void UseAtomicInsteadOfCriticalCheck::check(
 
       bool FoundCriticalWithoutAtomic = false;
       for (const auto &CriticalMatch : CriticalSections) {
+        const auto *X = CriticalMatch.getNodeAs<ValueDecl>("x");
+        const auto *Critical = CriticalMatch.getNodeAs<Stmt>("critical");
+
+        Visitor Vis{*Result.Context, X, Critical};
+        Vis.TraverseOMPExecutableDirective(
+            const_cast<OMPExecutableDirective *>(Parallel));
+        if (!Vis.IsShared)
+          return;
+
         const auto F = getAtomicDirective(CriticalMatch);
         if (F.Kind == AtomicKind::Unknown) {
           FoundCriticalWithoutAtomic = true;
@@ -490,6 +541,16 @@ void UseAtomicInsteadOfCriticalCheck::check(
 
   if (const auto *const UnnecessaryAtomic =
           Result.Nodes.getNodeAs<OMPAtomicDirective>("unnecessary-atomic")) {
+    const auto *const Directive =
+        Result.Nodes.getNodeAs<OMPExecutableDirective>("directive");
+    const auto *X = Result.Nodes.getNodeAs<ValueDecl>("x");
+
+    Visitor Vis{*Result.Context, X, UnnecessaryAtomic};
+    Vis.TraverseOMPExecutableDirective(
+        const_cast<OMPExecutableDirective *>(Directive));
+    if (Vis.IsShared)
+      return;
+
     const auto *const Operation = Result.Nodes.getNodeAs<Stmt>("operation");
     diag(Operation->getBeginLoc(), "this operation is declared with `omp "
                                    "atomic` but it does not involve a "
