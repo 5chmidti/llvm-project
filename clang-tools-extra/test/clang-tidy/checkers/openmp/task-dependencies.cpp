@@ -162,6 +162,11 @@ void f() {
     {
         int Other = Array[17];
     }
+
+    int* ptr = nullptr;
+    #pragma omp task depend(in: ptr)
+// CHECK-MESSAGES: :[[@LINE-1]]:33: warning: depending on pointer 'ptr' will create a dependency on the storage location of the pointer, not the underlying memory [openmp-task-dependencies]
+        int Other = *ptr;
 }
 
 // contains 'dependencies' to non-sibling tasks, which are wrong of course

@@ -144,6 +144,15 @@ void TaskDependenciesCheck::check(const MatchFinder::MatchResult &Result) {
 
       const Expr *VarRef = DependExpr;
 
+      if (VarRef->getType()->isPointerType()) {
+        diag(
+            DependExpr->getBeginLoc(),
+            "depending on pointer '%0' will create a dependency on the storage "
+            "location of the pointer, not the underlying memory")
+            << tooling::fixit::getText(*DependExpr, *Result.Context)
+            << DependExpr->getSourceRange();
+      }
+
       if (const auto *ArraySection =
               llvm::dyn_cast<OMPArraySectionExpr>(VarRef)) {
         VarRef = ArraySection->getBase()->IgnoreImplicit();
