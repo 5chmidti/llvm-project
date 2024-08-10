@@ -290,13 +290,15 @@ auto referenceExpression() { return declareExpression(); }
 
 // v = x;
 auto readAtomic() {
-  return binaryOperator(isAssignmentOperator(), hasRHS(declareX()),
+  return binaryOperator(isAssignmentOperator(),
+                        unless(isAllowedCompoundOperator()), hasRHS(declareX()),
                         hasLHS(declareV()));
 }
 
 // x = expr;
 auto writeAtomic() {
-  return binaryOperator(isAssignmentOperator(), hasLHS(declareX()),
+  return binaryOperator(isAssignmentOperator(),
+                        unless(isAllowedCompoundOperator()), hasLHS(declareX()),
                         hasRHS(declareExpression()));
 }
 
