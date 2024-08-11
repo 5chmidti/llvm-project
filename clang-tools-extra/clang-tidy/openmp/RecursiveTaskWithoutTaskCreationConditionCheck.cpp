@@ -27,6 +27,9 @@ const ast_matchers::internal::VariadicDynCastAllOfMatcher<Stmt,
 const ast_matchers::internal::VariadicDynCastAllOfMatcher<OMPClause,
                                                           OMPIfClause>
     ompIfClause;
+const ast_matchers::internal::VariadicDynCastAllOfMatcher<OMPClause,
+                                                          OMPFinalClause>
+    ompFinalClause;
 // NOLINTEND(readability-identifier-naming)
 
 class RecursiveTaskFinder : public RecursiveASTVisitor<RecursiveTaskFinder> {
@@ -39,13 +42,13 @@ public:
   bool TraverseOMPTaskDirective(OMPTaskDirective *TD) {
     if (TD == Task) {
       Check->diag(Task->getBeginLoc(),
-                  "recursive task creation without an 'if' clause may degrade "
-                  "performance due to the task-management overhead")
+                  "recursive task creation without an 'if' or 'final' clause "
+                  "may degrade performance due to the task-management overhead")
           << Task->getSourceRange();
       if (!Task->getClausesOfKind<OMPDependClause>().empty())
         Check->diag(
             Task->getBeginLoc(),
-            "the 'depend' clause of a task is ignored when the 'if' "
+            "the 'depend' clause of a task is ignored when the 'if' or 'final' "
             "clause evalutates to 'false'; ensure correctness if required",
             DiagnosticIDs::Level::Note)
             << Task->getSourceRange();
@@ -108,7 +111,10 @@ private:
 void RecursiveTaskWithoutTaskCreationConditionCheck::registerMatchers(
     MatchFinder *Finder) {
   Finder->addMatcher(
-      ompTaskDirective(unless(hasAnyClause(ompIfClause()))).bind("task"), this);
+      ompTaskDirective(unless(anyOf(hasAnyClause(ompIfClause()),
+                                    hasAnyClause(ompFinalClause()))))
+          .bind("task"),
+      this);
 }
 
 void RecursiveTaskWithoutTaskCreationConditionCheck::check(
