@@ -61,7 +61,8 @@ public:
     const auto *const Depend = llvm::dyn_cast<OMPDependClause>(Clause);
     if (!Depend)
       return true;
-    for (const Expr *const Var : Depend->getVarRefs()) {
+    for (const Expr *Var : Depend->getVarRefs()) {
+      Var = Var->IgnoreImplicit();
       if (const auto *const ArraySection =
               llvm::dyn_cast<OMPArraySectionExpr>(Var))
         saveInfo(ArraySection);
@@ -86,8 +87,7 @@ public:
     return true;
   }
 
-  llvm::SmallVector<std::map<const ValueDecl *, llvm::SmallVector<SectionInfo>>,
-                    2>
+  llvm::SmallVector<std::map<const Expr *, llvm::SmallVector<SectionInfo>>, 2>
       Results{{}};
 
 private:
@@ -96,7 +96,6 @@ private:
     const auto *const DRef = llvm::dyn_cast<DeclRefExpr>(Base);
     if (!DRef)
       return;
-    const ValueDecl *Val = DRef->getDecl();
     SectionInfo Info;
     Info.E = ArraySection;
 
@@ -111,11 +110,10 @@ private:
 
     Info.Stride = evaluate(ArraySection->getStride()).value_or(1);
 
-    Results.back()[Val].push_back(Info);
+    saveInfo(ArraySection->getBase()->IgnoreImplicit(), Info);
   }
 
   void saveInfo(const DeclRefExpr *DRef) {
-    const ValueDecl *const Val = DRef->getDecl();
     SectionInfo Info;
     Info.E = DRef;
 
@@ -123,31 +121,31 @@ private:
             DRef->getType().getCanonicalType().getTypePtr()))
       Info.Length = Array->getSize().getSExtValue();
 
-    Results.back()[Val].push_back(Info);
+    saveInfo(DRef, Info);
   }
 
-  const ValueDecl *getVar(const ArraySubscriptExpr *Subscript) {
-    const Expr *Base = Subscript->getBase()->IgnoreImplicit();
-    return getVar(Base);
-  }
-  const ValueDecl *getVar(const Expr *E) {
-    if (const auto *DRef = llvm::dyn_cast<DeclRefExpr>(E))
-      return DRef->getDecl();
-    return nullptr;
-  }
   void saveInfo(const ArraySubscriptExpr *Subscript) {
-    const auto *Val = getVar(Subscript);
-    assert(Val);
     SectionInfo Info;
     Info.E = Subscript;
     Info.LowerBound = evaluate(Subscript->getIdx()).value_or(-1);
     Info.Length = 1;
-    Results.back()[Val].push_back(Info);
+
+    saveInfo(Subscript->getBase()->IgnoreImplicit(), Info);
   }
 
-  void maybeDiagnose(
-      const std::map<const ValueDecl *, llvm::SmallVector<SectionInfo>>
-          &SiblingResult) {
+  void saveInfo(const Expr *E, SectionInfo Info) {
+    for (auto &[Key, Value] : Results.back())
+      if (utils::areStatementsIdentical(Key, E, Ctx)) {
+        Value.push_back(Info);
+        return;
+      }
+
+    Results.back()[E].push_back(Info);
+  }
+
+  void
+  maybeDiagnose(const std::map<const Expr *, llvm::SmallVector<SectionInfo>>
+                    &SiblingResult) {
     for (const auto &[E, Sections] : SiblingResult)
       for (const auto &[Index, LeftSection] : llvm::enumerate(Sections))
         for (const auto &RightSection : llvm::drop_begin(Sections, Index)) {
