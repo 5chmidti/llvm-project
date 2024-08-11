@@ -59,6 +59,9 @@ public:
         saveInfo(ArraySection);
       else if (const auto *const DRef = llvm::dyn_cast<DeclRefExpr>(Var))
         saveInfo(DRef);
+      else if (const auto *const Subscript =
+                   llvm::dyn_cast<ArraySubscriptExpr>(Var))
+        saveInfo(Subscript);
     }
 
     return true;
@@ -102,6 +105,7 @@ private:
 
     Results.back()[Val].push_back(Info);
   }
+
   void saveInfo(const DeclRefExpr *DRef) {
     const ValueDecl *const Val = DRef->getDecl();
     SectionInfo Info;
@@ -114,12 +118,32 @@ private:
     Results.back()[Val].push_back(Info);
   }
 
+  const ValueDecl *getVar(const ArraySubscriptExpr *Subscript) {
+    const Expr *Base = Subscript->getBase()->IgnoreImplicit();
+    return getVar(Base);
+  }
+  const ValueDecl *getVar(const Expr *E) {
+    if (const auto *DRef = llvm::dyn_cast<DeclRefExpr>(E))
+      return DRef->getDecl();
+    return nullptr;
+  }
+  void saveInfo(const ArraySubscriptExpr *Subscript) {
+    const auto *Val = getVar(Subscript);
+    assert(Val);
+    SectionInfo Info;
+    Info.E = Subscript;
+    Info.LowerBound = evaluate(Subscript->getIdx()).value_or(-1);
+    Info.Length = 1;
+    Results.back()[Val].push_back(Info);
+  }
+
   void maybeDiagnose(
       const std::map<const ValueDecl *, llvm::SmallVector<SectionInfo>>
           &SiblingResult) {
     for (const auto &[E, Sections] : SiblingResult)
       for (const auto &[Index, LeftSection] : llvm::enumerate(Sections))
         for (const auto &RightSection : llvm::drop_begin(Sections, Index)) {
+          // FIXME: dataflow could invalidate the areStatementsIdentical
           if (LeftSection.E == RightSection.E ||
               utils::areStatementsIdentical(LeftSection.E, RightSection.E, Ctx))
             continue;

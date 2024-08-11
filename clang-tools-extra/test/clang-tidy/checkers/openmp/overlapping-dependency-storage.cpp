@@ -81,3 +81,12 @@ void test9(int arr[]) {
         ;
     }
 }
+
+void test10() {
+    int arr[10];
+    #pragma omp task depend(out: arr[0:10])
+    ;
+    #pragma omp task depend(out: arr[2])
+    ;
+// CHECK-MESSAGES: :[[@LINE-4]]:34: warning: the array sections 'arr[0:10]' and 'arr[2]' have overlapping storage [openmp-overlapping-dependency-storage]
+}
