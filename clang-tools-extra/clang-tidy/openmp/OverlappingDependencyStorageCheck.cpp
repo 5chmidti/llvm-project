@@ -31,6 +31,14 @@
 using namespace clang::ast_matchers;
 
 namespace clang::tidy::openmp {
+namespace {
+// NOLINTBEGIN(readability-identifier-naming)
+const ast_matchers::internal::VariadicDynCastAllOfMatcher<Stmt,
+                                                          OMPTaskDirective>
+    ompTaskDirective;
+// NOLINTEND(readability-identifier-naming)
+} // namespace
+
 class OverlappingDependencyFinder
     : public RecursiveASTVisitor<OverlappingDependencyFinder> {
 public:
@@ -183,7 +191,7 @@ private:
 
 void OverlappingDependencyStorageCheck::registerMatchers(MatchFinder *Finder) {
   Finder->addMatcher(
-      functionDecl(hasDescendant(ompExecutableDirective())).bind("func"), this);
+      functionDecl(hasDescendant(ompTaskDirective())).bind("func"), this);
 }
 
 void OverlappingDependencyStorageCheck::check(
