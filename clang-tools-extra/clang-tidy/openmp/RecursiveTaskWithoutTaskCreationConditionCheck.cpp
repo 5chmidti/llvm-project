@@ -20,6 +20,7 @@
 using namespace clang::ast_matchers;
 
 namespace clang::tidy::openmp {
+namespace {
 // NOLINTBEGIN(readability-identifier-naming)
 const ast_matchers::internal::VariadicDynCastAllOfMatcher<Stmt,
                                                           OMPTaskDirective>
@@ -31,6 +32,7 @@ const ast_matchers::internal::VariadicDynCastAllOfMatcher<OMPClause,
                                                           OMPFinalClause>
     ompFinalClause;
 // NOLINTEND(readability-identifier-naming)
+} // namespace
 
 class RecursiveTaskFinder : public RecursiveASTVisitor<RecursiveTaskFinder> {
 public:
