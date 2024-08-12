@@ -64,8 +64,9 @@ void TaskDependenciesBetweenNonSiblingTasksCheck::registerMatchers(
               ompTaskDirective(
                   ast_matchers::hasAnyClause(
                       ompDependClause(forEachDependency(expr(anyOf(
-                          InnerVarRef, ompArraySectionExpr(
-                                           forEachDescendant(InnerVarRef))))))),
+                          InnerVarRef,
+                          ompArraySectionExpr(forEachDescendant(InnerVarRef)),
+                          arraySubscriptExpr(hasBase(InnerVarRef))))))),
                   forCallable(functionDecl(equalsBoundNode("context"))))
                   .bind("inner"))),
       this);
