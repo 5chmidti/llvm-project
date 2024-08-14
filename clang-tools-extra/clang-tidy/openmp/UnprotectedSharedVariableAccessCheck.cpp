@@ -210,8 +210,8 @@ public:
         State.Directives
             .isInDirective<OMPCriticalDirective, OMPAtomicDirective>();
     if (!IsProtected) {
-      const auto GetThreadNum =
-          callExpr(callee(functionDecl(hasName("::omp_get_thread_num"))));
+      const auto GetThreadNum = callExpr(callee(functionDecl(
+          hasAnyName("::omp_get_thread_num", "::omp_get_team_num"))));
       const auto ThreadNum =
           expr(anyOf(declRefExpr(to(varDecl(
                          hasType(qualType(isConstQualified(), isInteger())),
