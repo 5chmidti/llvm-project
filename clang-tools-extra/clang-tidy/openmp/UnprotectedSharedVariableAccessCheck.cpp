@@ -369,6 +369,7 @@ public:
                                        hasUnaryOperand(equalsBoundNode("var")),
                                        hasParent(AtomicIntrinsicCall)),
                          callExpr(
+                             hasAnyArgument(expr(equalsBoundNode("var"))),
                              callee(namedDecl(matchers::matchesAnyListedName(
                                  ThreadSafeFunctions)))),
                          IsCastToRValueOrConst, AtomicIntrinsicCall)))))
