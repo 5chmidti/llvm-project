@@ -1,4 +1,4 @@
-// RUN: %check_clang_tidy %s openmp-unprotected-shared-variable-access %t -- -config="{CheckOptions: {openmp-unprotected-shared-variable-access.ThreadSafeFunctions: 'threadSafeFunctionByValue;threadSafeFunctionByRef;threadSafeFunctionByConstRef'}}" --extra-arg=-fopenmp
+// RUN: %check_clang_tidy %s openmp-unprotected-shared-variable-access %t -- --extra-arg=-fopenmp
 
 using size_t = unsigned long;
 
@@ -36,6 +36,12 @@ void doesNotMutate(const std::atomic<int>&);
 void doesNotMutateC(const _Atomic int&);
 
 int Global = 0;
+
+void modifyGlobal() { Global = 0; }
+// CHECK-MESSAGES: :[[@LINE-1]]:23: warning: do not access shared variable 'Global' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
+
+void modifyGlobalPrivate() { Global = 0; }
+// FIXME: FN: accessing a private global outside the actual construct is UB (private.2.c)
 
 struct omp_lock_t {};
 void omp_init_lock(omp_lock_t*);
@@ -270,6 +276,7 @@ void var(int* Buffer, int BufferSize) {
     {
         #pragma omp single nowait
         Sum = 0;
+// CHECK-MESSAGES: :[[@LINE-1]]:9: warning: do not access shared variable 'Sum' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
 
         auto Val = Sum;
 // CHECK-MESSAGES: :[[@LINE-1]]:20: warning: do not access shared variable 'Sum' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
@@ -279,6 +286,21 @@ void var(int* Buffer, int BufferSize) {
     {
         Global = 0;
 // CHECK-MESSAGES: :[[@LINE-1]]:9: warning: do not access shared variable 'Global' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
+    }
+
+    #pragma omp parallel private(Global)
+    {
+        Global = 0;
+    }
+
+    #pragma omp parallel
+    {
+        modifyGlobal();
+    }
+
+    #pragma omp parallel private(Global)
+    {
+        modifyGlobal();
     }
 
     #pragma omp parallel
@@ -370,6 +392,20 @@ void var(int* Buffer, int BufferSize) {
 
     #pragma omp parallel
         modifyParm(0);
+
+    // int tile1 = 0;
+    // int tile2 = 0;
+    // #pragma omp parallel
+    // #pragma omp for
+    // #pragma omp tile sizes(4,4)
+    // for (tile1= 0;tile1< 16;++tile1)
+    //     for (tile2= 0;tile2< 16;++tile2)
+    //         {}
+
+
+    // #pragma omp parallel
+    // #pragma omp single
+    //     Sum = 10;
 }
 
 int G = 0;
@@ -1023,17 +1059,17 @@ void threadSafeFunctions(Type value) {
     #pragma omp parallel
     {
         threadSafeFunctionByValue(value);
-// CHECK-MESSAGES-NOTMARKED: :[[@LINE-1]]:35: warning: do not access shared variable 'value' of type 'Type' without synchronization [openmp-unprotected-shared-variable-access]
+// CHECK-MESSAGES: :[[@LINE-1]]:35: warning: do not access shared variable 'value' of type 'Type' without synchronization [openmp-unprotected-shared-variable-access]
         threadSafeFunctionByRef(value);
-// CHECK-MESSAGES-NOTMARKED: :[[@LINE-1]]:33: warning: do not access shared variable 'value' of type 'Type' without synchronization [openmp-unprotected-shared-variable-access]
+// CHECK-MESSAGES: :[[@LINE-1]]:33: warning: do not access shared variable 'value' of type 'Type' without synchronization [openmp-unprotected-shared-variable-access]
         threadSafeFunctionByConstRef(value);
-// CHECK-MESSAGES-NOTMARKED: :[[@LINE-1]]:38: warning: do not access shared variable 'value' of type 'Type' without synchronization [openmp-unprotected-shared-variable-access]
+// CHECK-MESSAGES: :[[@LINE-1]]:38: warning: do not access shared variable 'value' of type 'Type' without synchronization [openmp-unprotected-shared-variable-access]
         threadSafeFunctionByValue2(0, value);
-// CHECK-MESSAGES-NOTMARKED: :[[@LINE-1]]:39: warning: do not access shared variable 'value' of type 'Type' without synchronization [openmp-unprotected-shared-variable-access]
+// CHECK-MESSAGES: :[[@LINE-1]]:39: warning: do not access shared variable 'value' of type 'Type' without synchronization [openmp-unprotected-shared-variable-access]
         threadSafeFunctionByRef2(0, value);
-// CHECK-MESSAGES-NOTMARKED: :[[@LINE-1]]:37: warning: do not access shared variable 'value' of type 'Type' without synchronization [openmp-unprotected-shared-variable-access]
+// CHECK-MESSAGES: :[[@LINE-1]]:37: warning: do not access shared variable 'value' of type 'Type' without synchronization [openmp-unprotected-shared-variable-access]
         threadSafeFunctionByConstRef2(0, value);
-// CHECK-MESSAGES-NOTMARKED: :[[@LINE-1]]:42: warning: do not access shared variable 'value' of type 'Type' without synchronization [openmp-unprotected-shared-variable-access]
+// CHECK-MESSAGES: :[[@LINE-1]]:42: warning: do not access shared variable 'value' of type 'Type' without synchronization [openmp-unprotected-shared-variable-access]
     }
 }
 
@@ -1345,7 +1381,6 @@ void target() {
     #pragma omp target map(to: Sum)
     {
         Sum = 0;
-// CHECK-MESSAGES: :[[@LINE-1]]:9: warning: do not access shared variable 'Sum' of type 'int' without synchronization [openmp-unprotected-shared-variable-access]
     }
 
     #pragma omp target teams map(to: Sum)

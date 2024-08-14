@@ -10,7 +10,6 @@
 #define LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_OPENMP_UNPROTECTEDSHAREDVARIABLEACCESSCHECK_H
 
 #include "../ClangTidyCheck.h"
-#include "clang/AST/Decl.h"
 #include "llvm/ADT/StringRef.h"
 #include <vector>
 
@@ -36,7 +35,6 @@ public:
 
 private:
   std::vector<StringRef> ThreadSafeTypes;
-  std::vector<StringRef> ThreadSafeFunctions;
 };
 
 } // namespace clang::tidy::openmp

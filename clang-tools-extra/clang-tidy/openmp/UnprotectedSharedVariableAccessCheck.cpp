@@ -56,10 +56,8 @@ bool isOMPLockType(const QualType &QType) {
 
 class Visitor : public RecursiveASTVisitor<Visitor> {
 public:
-  Visitor(ASTContext &Ctx, llvm::ArrayRef<llvm::StringRef> ThreadSafeTypes,
-          llvm::ArrayRef<llvm::StringRef> ThreadSafeFunctions)
-      : State(Ctx), Ctx(Ctx), ThreadSafeTypes(ThreadSafeTypes),
-        ThreadSafeFunctions(ThreadSafeFunctions) {}
+  Visitor(ASTContext &Ctx, llvm::ArrayRef<llvm::StringRef> ThreadSafeTypes)
+      : State(Ctx), Ctx(Ctx), ThreadSafeTypes(ThreadSafeTypes) {}
 
   using Base = RecursiveASTVisitor<Visitor>;
   struct AnalysisResult {
@@ -368,10 +366,6 @@ public:
                          unaryOperator(hasOperatorName("&"),
                                        hasUnaryOperand(equalsBoundNode("var")),
                                        hasParent(AtomicIntrinsicCall)),
-                         callExpr(
-                             hasAnyArgument(expr(equalsBoundNode("var"))),
-                             callee(namedDecl(matchers::matchesAnyListedName(
-                                 ThreadSafeFunctions)))),
                          IsCastToRValueOrConst, AtomicIntrinsicCall)))))
                      .bind("dref")),
              *DRef, Ctx)
@@ -464,7 +458,6 @@ private:
   VariableState State;
   ASTContext &Ctx;
   const llvm::ArrayRef<llvm::StringRef> ThreadSafeTypes;
-  const llvm::ArrayRef<llvm::StringRef> ThreadSafeFunctions;
 };
 
 const auto DefaultThreadSafeTypes = "std::atomic.*;std::atomic_ref.*";
@@ -482,7 +475,7 @@ void UnprotectedSharedVariableAccessCheck::check(
 
   const auto *const TU = Result.Nodes.getNodeAs<TranslationUnitDecl>("TU");
 
-  Visitor V(Ctx, ThreadSafeTypes, ThreadSafeFunctions);
+  Visitor V(Ctx, ThreadSafeTypes);
   V.TraverseTranslationUnitDecl(const_cast<TranslationUnitDecl *>(TU));
   for (const auto &[SharedVar, Res] : V.takeResults()) {
     const auto &[Mutations, UnprotectedAcesses, UnprotectedDependentAccesses] =
@@ -553,15 +546,11 @@ void UnprotectedSharedVariableAccessCheck::storeOptions(
     ClangTidyOptions::OptionMap &Opts) {
   Options.store(Opts, "ThreadSafeTypes",
                 utils::options::serializeStringList(ThreadSafeTypes));
-  Options.store(Opts, "ThreadSafeFunctions",
-                utils::options::serializeStringList(ThreadSafeFunctions));
 }
 
 UnprotectedSharedVariableAccessCheck::UnprotectedSharedVariableAccessCheck(
     StringRef Name, ClangTidyContext *Context)
     : ClangTidyCheck(Name, Context),
       ThreadSafeTypes(utils::options::parseStringList(
-          Options.get("ThreadSafeTypes", DefaultThreadSafeTypes))),
-      ThreadSafeFunctions(utils::options::parseStringList(
-          Options.get("ThreadSafeFunctions", DefaultThreadSafeFunctions))) {}
+          Options.get("ThreadSafeTypes", DefaultThreadSafeTypes))) {}
 } // namespace clang::tidy::openmp
