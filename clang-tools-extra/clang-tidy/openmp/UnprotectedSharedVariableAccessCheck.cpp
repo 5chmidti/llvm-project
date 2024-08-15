@@ -99,11 +99,8 @@ public:
       return true;
 
     if (Directive->isStandaloneDirective()) {
-      if (const auto *const Barrier =
-              llvm::dyn_cast<OMPBarrierDirective>(Directive))
-        saveAnalysisAndStartNewEpoch();
-      else
-        startNewEpochIfEncountered<OMPTaskwaitDirective>(Directive);
+      startNewEpochIfEncountered<OMPTaskwaitDirective>(Directive);
+      startNewEpochIfEncountered<OMPBarrierDirective>(Directive);
 
       return true;
     }
