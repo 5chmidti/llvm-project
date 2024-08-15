@@ -1077,6 +1077,7 @@ void tasks() {
     int Sum = 0;
     int Sum2 = 0;
     #pragma omp parallel
+    #pragma omp single
     {
         #pragma omp task
         Sum = 1;
@@ -1084,12 +1085,14 @@ void tasks() {
     }
 
     #pragma omp parallel
+    #pragma omp single
     {
         #pragma omp task depend(out: Sum)
         Sum = 1;
     }
 
     #pragma omp parallel
+    #pragma omp single
     {
         #pragma omp task depend(in: Sum)
         auto Val = Sum;
@@ -1102,6 +1105,7 @@ void tasks() {
     }
 
     #pragma omp parallel
+    #pragma omp single
     {
         #pragma omp task depend(inout: Sum)
         ++Sum;
@@ -1112,6 +1116,7 @@ void tasks() {
     }
 
     #pragma omp parallel
+    #pragma omp single
     {
         #pragma omp task depend(out: Sum)
         Sum = 1;
@@ -1122,6 +1127,7 @@ void tasks() {
     }
 
     #pragma omp parallel
+    #pragma omp single
     {
         #pragma omp task depend(out: Sum)
         Sum = 1;
@@ -1131,6 +1137,7 @@ void tasks() {
     }
 
     #pragma omp parallel
+    #pragma omp single
     {
         #pragma omp task depend(out: Sum)
         Sum = 1;
@@ -1142,6 +1149,7 @@ void tasks() {
     }
 
     #pragma omp parallel
+    #pragma omp single
     {
         #pragma omp task depend(out: Sum)
         Sum = 1;
@@ -1153,6 +1161,7 @@ void tasks() {
     }
 
     #pragma omp parallel
+    #pragma omp single
     {
         #pragma omp task depend(out: Sum)
         Sum = 1;
@@ -1164,6 +1173,7 @@ void tasks() {
     }
 
     #pragma omp parallel
+    #pragma omp single
     {
         #pragma omp task depend(out: Sum)
         Sum = 1;
@@ -1174,6 +1184,7 @@ void tasks() {
     }
 
     #pragma omp parallel
+    #pragma omp single
     {
         #pragma omp task depend(out: Sum)
         Sum = 1;
@@ -1184,6 +1195,7 @@ void tasks() {
     }
 
     #pragma omp parallel
+    #pragma omp single
     {
         #pragma omp task depend(out: Sum)
         Sum = 1;
@@ -1195,6 +1207,7 @@ void tasks() {
     }
 
     #pragma omp parallel
+    #pragma omp single
     {
         #pragma omp task depend(out: Sum)
         Sum = 1;
@@ -1208,6 +1221,7 @@ void tasks() {
     }
 
     #pragma omp parallel
+    #pragma omp single
         #pragma omp task
             Sum = 1;
 // CHECK-MESSAGES: :[[@LINE-1]]:13: warning: do not access shared variable 'Sum' of type 'int' without synchronization; specify synchronization on the task with `depend` [openmp-unprotected-shared-variable-access]
@@ -1248,6 +1262,7 @@ void tasks() {
     }
 
     #pragma omp parallel
+    #pragma omp single
     {
         #pragma omp task depend(out: Sum)
             Sum = 1;
@@ -1262,6 +1277,7 @@ void tasks() {
     }
 
     #pragma omp parallel
+    #pragma omp single
     {
         #pragma omp task depend(out: Sum)
         Sum = 1;
@@ -1277,6 +1293,7 @@ void tasks() {
     }
 
     #pragma omp parallel
+    #pragma omp single
     {
         int Local = 10;
 
@@ -1287,6 +1304,7 @@ void tasks() {
     }
 
     #pragma omp parallel
+    #pragma omp single
     {
         int Local = 10;
 
@@ -1299,6 +1317,7 @@ void tasks() {
     }
 
     #pragma omp parallel
+    #pragma omp single
     {
         int Local = 10;
 
@@ -1310,6 +1329,7 @@ void tasks() {
     }
 
     #pragma omp parallel
+    #pragma omp single
     {
         int Local = 10;
 
