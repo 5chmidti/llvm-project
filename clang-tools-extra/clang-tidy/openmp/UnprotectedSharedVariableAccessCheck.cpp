@@ -51,7 +51,8 @@ bool isOMPLockType(const QualType &QType) {
   const std::string UnqualifiedTypeAsString =
       QualType(QType->getUnqualifiedDesugaredType(), 0).getAsString();
 
-  return UnqualifiedTypeAsString == "struct omp_lock_t";
+  return UnqualifiedTypeAsString == "struct omp_lock_t" ||
+         UnqualifiedTypeAsString == "struct omp_nest_lock_t";
 }
 
 class Visitor : public RecursiveASTVisitor<Visitor> {
@@ -280,9 +281,10 @@ public:
     llvm::StringRef FunctionName;
     if (FDecl->getDeclName().isIdentifier())
       FunctionName = FDecl->getName();
-    if (FunctionName == "omp_set_lock")
+    if (FunctionName == "omp_set_lock" || FunctionName == "omp_set_nest_lock")
       ++LockedRegionCount;
-    else if (FunctionName == "omp_unset_lock")
+    else if (FunctionName == "omp_unset_lock" ||
+             FunctionName == "omp_unset_nest_lock")
       --LockedRegionCount;
     CallStack.push_back(FDecl);
     if (FDecl->hasBody()) {
