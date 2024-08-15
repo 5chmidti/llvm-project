@@ -154,6 +154,16 @@ class DependentVariableState {
 public:
   void add(const OMPExecutableDirective *const Directive) {
     DependentVarsStack.push_back(getDependVariables(Directive));
+
+    AllMemoryStack.push_back(llvm::any_of(
+        Directive->getClausesOfKind<OMPDependClause>(),
+        [](const OMPDependClause *Depend) {
+          return Depend->getDependencyKind() ==
+                     OpenMPDependClauseKind::OMPC_DEPEND_outallmemory ||
+                 Depend->getDependencyKind() ==
+                     OpenMPDependClauseKind::OMPC_DEPEND_inoutallmemory;
+        }));
+
     CurrentDependentVars = DependentVarsStack.back();
     AllTimeDependentVars.insert(DependentVarsStack.back().begin(),
                                 DependentVarsStack.back().end());
@@ -162,6 +172,8 @@ public:
   void pop() {
     DependentVarsStack.pop_back();
 
+    AllMemoryStack.pop_back();
+
     if (!DependentVarsStack.empty())
       CurrentDependentVars = DependentVarsStack.back();
     else
@@ -169,17 +181,20 @@ public:
   }
 
   bool isDependent(const ValueDecl *Var) const {
-    return CurrentDependentVars.contains(Var);
+    return (!AllMemoryStack.empty() && AllMemoryStack.back()) ||
+           CurrentDependentVars.contains(Var);
   }
 
   bool wasAtSomePointDependent(const ValueDecl *Var) const {
-    return AllTimeDependentVars.contains(Var);
+    return llvm::is_contained(AllMemoryStack, true) ||
+           AllTimeDependentVars.contains(Var);
   }
 
 private:
   llvm::SmallPtrSet<const ValueDecl *, 4> AllTimeDependentVars;
   llvm::SmallPtrSet<const ValueDecl *, 4> CurrentDependentVars;
   llvm::SmallVector<llvm::SmallPtrSet<const ValueDecl *, 4>> DependentVarsStack;
+  llvm::SmallVector<bool> AllMemoryStack;
 };
 
 class DirectiveState {
