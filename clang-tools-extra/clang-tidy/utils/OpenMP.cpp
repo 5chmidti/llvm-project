@@ -201,22 +201,19 @@ bool isUndeferredTask(const OMPExecutableDirective *const Directive,
 bool hasBarrier(const OMPExecutableDirective *const Directive,
                 const ASTContext &Ctx) {
   const bool HasNowait = hasAnyClause<OMPNowaitClause>(Directive);
-  if (llvm::isa<OMPBarrierDirective, OMPTaskwaitDirective,
-                OMPTaskgroupDirective>(Directive) ||
-      (llvm::isa<OMPSingleDirective>(Directive) && !HasNowait) ||
-      isUndeferredTask(Directive, Ctx))
-    return true;
-
-  if (hasAnyClause<OMPNowaitClause, OMPCopyprivateClause>(Directive))
+  if (HasNowait)
     return false;
-
-  if (isOpenMPDirectiveKind(
-          Directive->getDirectiveKind(), OpenMPDirectiveKind::OMPD_parallel,
-          OpenMPDirectiveKind::OMPD_scope, OpenMPDirectiveKind::OMPD_sections,
-          OpenMPDirectiveKind::OMPD_workshare, OpenMPDirectiveKind::OMPD_for))
-    return true;
-
-  return false;
+  return llvm::isa<OMPBarrierDirective, OMPTaskwaitDirective,
+                   OMPTaskgroupDirective>(Directive) ||
+         llvm::isa<OMPSingleDirective>(Directive) ||
+         llvm::isa<OMPTaskLoopDirective>(Directive) ||
+         isUndeferredTask(Directive, Ctx) ||
+         hasAnyClause<OMPCopyprivateClause>(Directive) ||
+         isOpenMPDirectiveKind(Directive->getDirectiveKind(),
+                               OpenMPDirectiveKind::OMPD_parallel,
+                               OpenMPDirectiveKind::OMPD_scope,
+                               OpenMPDirectiveKind::OMPD_sections,
+                               OpenMPDirectiveKind::OMPD_workshare);
 }
 
 bool isOpenMPDirectiveKind(const OpenMPDirectiveKind DKind,
