@@ -204,11 +204,11 @@ bool hasBarrier(const OMPExecutableDirective *const Directive,
   if (HasNowait)
     return false;
   return llvm::isa<OMPBarrierDirective, OMPTaskwaitDirective,
-                   OMPTaskgroupDirective>(Directive) ||
-         llvm::isa<OMPSingleDirective>(Directive) ||
-         llvm::isa<OMPTaskLoopDirective>(Directive) ||
+                   OMPTaskgroupDirective, OMPSingleDirective,
+                   OMPTaskLoopDirective>(Directive) ||
          isUndeferredTask(Directive, Ctx) ||
          hasAnyClause<OMPCopyprivateClause>(Directive) ||
+         isOpenMPWorksharingDirective(Directive->getDirectiveKind()) ||
          isOpenMPDirectiveKind(Directive->getDirectiveKind(),
                                OpenMPDirectiveKind::OMPD_parallel,
                                OpenMPDirectiveKind::OMPD_scope,
