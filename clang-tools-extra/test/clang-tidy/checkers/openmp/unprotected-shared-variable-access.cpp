@@ -406,6 +406,18 @@ void var(int* Buffer, int BufferSize) {
     // #pragma omp parallel
     // #pragma omp single
     //     Sum = 10;
+
+    int* Ptr = &Sum;
+
+    #pragma omp parallel
+    *Ptr = 10;
+
+    #pragma omp parallel
+    *(Ptr + 0) = 10;
+
+    #pragma omp parallel
+    Ptr = nullptr;
+// CHECK-MESSAGES: :[[@LINE-1]]:5: warning: do not access shared variable 'Ptr' of type 'int *' without synchronization [openmp-unprotected-shared-variable-access]
 }
 
 int G = 0;
