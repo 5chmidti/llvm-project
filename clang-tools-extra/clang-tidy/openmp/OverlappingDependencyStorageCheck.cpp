@@ -57,10 +57,7 @@ public:
 
   ~OverlappingDependencyFinder() { maybeDiagnose(Results.back()); }
 
-  bool TraverseOMPClause(OMPClause *Clause) {
-    const auto *const Depend = llvm::dyn_cast<OMPDependClause>(Clause);
-    if (!Depend)
-      return true;
+  bool analyzeOMPClause(const OMPDependClause *Depend) {
     for (const Expr *Var : Depend->getVarRefs()) {
       Var = Var->IgnoreImplicit();
       if (const auto *const ArraySection =
@@ -77,8 +74,8 @@ public:
   }
 
   bool TraverseOMPTaskDirective(OMPTaskDirective *TD) {
-    for (OMPClause *Clause : TD->clauses())
-      TraverseOMPClause(Clause);
+    for (auto *Clause : TD->getClausesOfKind<OMPDependClause>())
+      analyzeOMPClause(Clause);
 
     Results.push_back({});
     Base::TraverseStmt(TD->getStructuredBlock());
