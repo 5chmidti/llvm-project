@@ -8,6 +8,7 @@
 
 #include "DoNotModifyLoopVariableCheck.h"
 #include "clang/AST/DeclCXX.h"
+#include "clang/AST/OpenMPClause.h"
 #include "clang/Tooling/FixIt.h"
 #include "llvm/ADT/SetOperations.h"
 #include "llvm/ADT/SmallPtrSet.h"
@@ -151,11 +152,9 @@ void DoNotModifyLoopVariableCheck::check(
   const auto *const Scope = Result.Nodes.getNodeAs<Stmt>("scope");
   const auto *const LoopDirective =
       Result.Nodes.getNodeAs<OMPLoopDirective>("directive");
-  const auto *const Collapse =
-      Result.Nodes.getNodeAs<OMPCollapseClause>("collapse");
   const auto *const ForLike = Result.Nodes.getNodeAs<Stmt>("for-like");
-  const std::optional<size_t> OptCollapseNum =
-      getOptCollapseNum(Collapse, *Result.Context);
+  const std::optional<size_t> OptCollapseNum = getOptCollapseNum(
+      LoopDirective->getSingleClause<OMPCollapseClause>(), *Result.Context);
   auto Analyzer = AllMutationsFinder(*Scope, *Result.Context);
 
   llvm::SmallPtrSet<const ValueDecl *, 4> Counters = {};

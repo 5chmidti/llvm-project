@@ -39,6 +39,25 @@ void test(int *Buffer, int BufferSize) {
         }
     }
 
+    #pragma omp parallel for firstprivate(BufferSize)
+    for (int LoopVar = 0; LoopVar < 2048; ++LoopVar) {
+        for (int LoopVar2 = 0; LoopVar2 < (BufferSize * BufferSize); ++LoopVar2) {
+            if (Buffer[LoopVar] > 0) {
+                BufferSize = 42;
+            }
+        }
+    }
+
+    #pragma omp parallel for firstprivate(BufferSize) collapse(2)
+    for (int LoopVar = 0; LoopVar < 2048; ++LoopVar) {
+        for (int LoopVar2 = 0; LoopVar2 < (BufferSize * BufferSize); ++LoopVar2) {
+            if (Buffer[LoopVar] > 0) {
+                BufferSize = 42;
+// CHECK-MESSAGES:[[@LINE-1]]:17: warning: do not mutate the variable 'BufferSize' used in the for statement condition of the OpenMP work-sharing construct [openmp-do-not-modify-loop-variable]
+            }
+        }
+    }
+
     #pragma omp parallel for firstprivate(BufferSize) collapse(2)
     for (int LoopVar = 0; LoopVar < (BufferSize * BufferSize); ++LoopVar) {
         for (int LoopVar2 = 0; LoopVar2 < (BufferSize * BufferSize); ++LoopVar2) {
