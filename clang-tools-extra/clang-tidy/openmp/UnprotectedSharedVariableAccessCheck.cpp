@@ -268,9 +268,6 @@ public:
     if (ParallelContextDepth == 0)
       return true;
 
-    Base::TraverseStmt(CE->getCallee());
-    for (Expr *const Arg : CE->arguments())
-      Base::TraverseStmt(Arg);
     auto *const FDecl =
         llvm::dyn_cast_or_null<FunctionDecl>(CE->getCalleeDecl());
     if (!FDecl)
@@ -283,9 +280,11 @@ public:
       FunctionName = FDecl->getName();
     if (FunctionName == "omp_set_lock" || FunctionName == "omp_set_nest_lock")
       ++LockedRegionCount;
-    else if (FunctionName == "omp_unset_lock" ||
-             FunctionName == "omp_unset_nest_lock")
-      --LockedRegionCount;
+
+    Base::TraverseStmt(CE->getCallee());
+    for (Expr *const Arg : CE->arguments())
+      Base::TraverseStmt(Arg);
+
     CallStack.push_back(FDecl);
     if (FDecl->hasBody()) {
       for (ParmVarDecl *const Param : FDecl->parameters())
@@ -293,6 +292,11 @@ public:
       Base::TraverseFunctionDecl(FDecl);
     }
     CallStack.pop_back();
+
+    if (FunctionName == "omp_unset_lock" ||
+        FunctionName == "omp_unset_nest_lock")
+      --LockedRegionCount;
+
     return true;
   }
 
@@ -300,9 +304,6 @@ public:
     if (ParallelContextDepth == 0)
       return true;
 
-    Base::TraverseStmt(CE->getCallee());
-    for (Expr *const Arg : CE->arguments())
-      Base::TraverseStmt(Arg);
     auto *const FDecl =
         llvm::dyn_cast_or_null<FunctionDecl>(CE->getCalleeDecl());
     if (!FDecl)
@@ -313,10 +314,12 @@ public:
     llvm::StringRef FunctionName;
     if (FDecl->getDeclName().isIdentifier())
       FunctionName = FDecl->getName();
-    if (FunctionName == "omp_set_lock")
+    if (FunctionName == "omp_set_lock" || FunctionName == "omp_set_nest_lock")
       ++LockedRegionCount;
-    else if (FunctionName == "omp_unset_lock")
-      --LockedRegionCount;
+
+    Base::TraverseStmt(CE->getCallee());
+    for (Expr *const Arg : CE->arguments())
+      Base::TraverseStmt(Arg);
     CallStack.push_back(FDecl);
     if (FDecl->hasBody()) {
       for (ParmVarDecl *const Param : FDecl->parameters())
@@ -324,6 +327,11 @@ public:
       Base::TraverseFunctionDecl(FDecl);
     }
     CallStack.pop_back();
+
+    if (FunctionName == "omp_unset_lock" ||
+        FunctionName == "omp_unset_nest_lock")
+      --LockedRegionCount;
+
     return true;
   }
 
