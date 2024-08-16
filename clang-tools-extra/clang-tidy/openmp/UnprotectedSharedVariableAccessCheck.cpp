@@ -133,16 +133,22 @@ public:
   // 'getDerived().TraverseOMPExecutableDirective' before traversing
   // it's children, which would cause visitation of the statements
   // inside the directive to be traversed twice.
-  bool TraverseOMPCriticalDirective(OMPCriticalDirective *D) {
-    return TraverseOMPExecutableDirective(D);
+  bool TraverseOMPCriticalDirective(OMPCriticalDirective *S) {
+    return TraverseOMPExecutableDirective(S);
   }
-  bool TraverseOMPAtomicDirective(OMPAtomicDirective *D) {
-    return TraverseOMPExecutableDirective(D);
+  bool TraverseOMPAtomicDirective(OMPAtomicDirective *S) {
+    return TraverseOMPExecutableDirective(S);
   }
-  bool TraverseOMPSingleDirective(OMPSingleDirective *D) {
-    return TraverseOMPExecutableDirective(D);
+  bool TraverseOMPSingleDirective(OMPSingleDirective *S) {
+    return TraverseOMPExecutableDirective(S);
   }
 
+  bool TraverseOMPTaskDirective(OMPTaskDirective *S) {
+    return TraverseOMPExecutableDirective(S);
+  }
+  bool TraverseOMPParallelDirective(OMPParallelDirective *S) {
+    return TraverseOMPExecutableDirective(S);
+  }
   bool TraverseVarDecl(VarDecl *V) {
     if (V->hasGlobalStorage())
       State.SharedAndPrivateVars.addGlobal(V);
@@ -160,7 +166,7 @@ public:
   }
 
   bool TraverseCapturedStmt(CapturedStmt *S) { return true; }
-  bool TraverseCapturedDecl(CapturedDecl *D) { return true; }
+  bool TraverseCapturedDecl(CapturedDecl *S) { return true; }
 
   bool TraverseDeclRefExpr(DeclRefExpr *DRef) {
     if (ParallelContextDepth == 0)
@@ -468,7 +474,6 @@ private:
 };
 
 const auto DefaultThreadSafeTypes = "std::atomic.*;std::atomic_ref.*";
-const auto DefaultThreadSafeFunctions = "";
 } // namespace
 
 void UnprotectedSharedVariableAccessCheck::registerMatchers(
