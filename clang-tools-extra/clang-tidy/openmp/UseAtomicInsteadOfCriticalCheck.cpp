@@ -22,8 +22,10 @@
 #include "clang/ASTMatchers/ASTMatchersInternal.h"
 #include "clang/ASTMatchers/ASTMatchersMacros.h"
 #include "clang/Basic/Diagnostic.h"
+#include "clang/Basic/DiagnosticIDs.h"
 #include "clang/Basic/OpenMPKinds.h"
 #include "clang/Basic/SourceLocation.h"
+#include "clang/Tooling/Transformer/SourceCode.h"
 #include "llvm/Frontend/OpenMP/OMPConstants.h"
 #include <cstdint>
 #include <vector>
@@ -553,10 +555,14 @@ void UseAtomicInsteadOfCriticalCheck::check(
       return;
 
     const auto *const Operation = Result.Nodes.getNodeAs<Stmt>("operation");
-    diag(Operation->getBeginLoc(), "this operation is declared with `omp "
-                                   "atomic` but it does not involve a "
+    diag(Operation->getBeginLoc(), "this operation is declared with 'omp "
+                                   "atomic' but it does not involve a "
                                    "shared variable")
-        << Operation->getSourceRange()
+        << Operation->getSourceRange();
+    diag(Operation->getBeginLoc(),
+         "remove the 'atomic' directive if %0 is not shared",
+         DiagnosticIDs::Level::Note)
+        << tooling::getText(*X, *Result.Context)
         << FixItHint::CreateRemoval(UnnecessaryAtomic->getSourceRange());
   }
 }
